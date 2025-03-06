@@ -1,0 +1,27 @@
+{
+  "name": "electron-libp2p-tests",
+  "version": "1.0.0",
+  "main": "dist/main.js",
+  "scripts": {
+    "dev": "concurrently \"npm run watch:tsc\" \"npm run wait:tsc\" \"npm run dev:vite\" \"npm run watch:electron\"",
+    "dev:vite": "cd react && npm run dev",
+    "dev:electron": "wait-on http://localhost:5173 && electron dist/main.js",
+    "build": "tsc -p electron",
+    "start": "npm run build && electron dist/main.js",
+    "watch:electron": "concurrently \"npm run watch:tsc\" \"npm run watch:nodemon\"",
+    "watch:tsc": "tsc -p electron --watch",
+    "watch:nodemon": "nodemon --watch dist --exec electron dist/main.js",
+    "wait:tsc": "wait-on dist/main.js"
+  },
+  "dependencies": {
+    "electron": "^34.3.0",
+    "wait-on": "^8.0.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.5",
+    "concurrently": "^9.1.2",
+    "electron-builder": "^25.1.8",
+    "nodemon": "^3.1.9",
+    "typescript": "^5.7.3"
+  }
+}
