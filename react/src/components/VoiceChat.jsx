@@ -1,9 +1,5 @@
-interface voiceChatProps {
-  chatHeight: string;
-  chatWidth: string;
-}
 
-function VoiceChat(props: voiceChatProps) {
+function VoiceChat(props) {
   return (
     <div
       style={{

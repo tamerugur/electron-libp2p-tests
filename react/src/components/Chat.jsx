@@ -1,11 +1,6 @@
 import sendIcon from "../assets/sendIcon.svg";
 
-interface voiceChatProps {
-  chatHeight: string;
-  chatWidth: string;
-}
-
-function Chat(props: voiceChatProps) {
+function Chat(props) {
   return (
     <div
       style={{

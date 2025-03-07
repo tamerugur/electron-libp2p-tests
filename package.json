@@ -1,20 +1,32 @@
 {
   "name": "electron-libp2p-tests",
   "version": "1.0.0",
+  "type": "module",
   "main": "dist/main.js",
   "scripts": {
-    "dev": "concurrently \"npm run watch:tsc\" \"npm run wait:tsc\" \"npm run dev:vite\" \"npm run watch:electron\"",
+    "dev": "concurrently \"npm run dev:vite\" \"npm run dev:electron\"",
     "dev:vite": "cd react && npm run dev",
-    "dev:electron": "wait-on http://localhost:5173 && electron dist/main.js",
-    "build": "tsc -p electron",
-    "start": "npm run build && electron dist/main.js",
-    "watch:electron": "concurrently \"npm run watch:tsc\" \"npm run watch:nodemon\"",
-    "watch:tsc": "tsc -p electron --watch",
-    "watch:nodemon": "nodemon --watch dist --exec electron dist/main.js",
-    "wait:tsc": "wait-on dist/main.js"
+    "dev:electron": "wait-on http://localhost:5173 && electron electron/main.js"
   },
   "dependencies": {
+    "@chainsafe/libp2p-gossipsub": "^14.1.0",
+    "@chainsafe/libp2p-noise": "^16.0.3",
+    "@chainsafe/libp2p-yamux": "^7.0.1",
+    "@libp2p/bootstrap": "^11.0.30",
+    "@libp2p/circuit-relay-v2": "^3.2.6",
+    "@libp2p/identify": "^3.0.25",
+    "@libp2p/kad-dht": "^14.2.13",
+    "@libp2p/mdns": "^11.0.30",
+    "@libp2p/mplex": "^11.0.30",
+    "@libp2p/noise": "^12.0.1",
+    "@libp2p/peer-id": "^5.0.16",
+    "@libp2p/pubsub": "^10.1.6",
+    "@libp2p/tcp": "^10.1.6",
+    "@libp2p/websockets": "^9.2.6",
+    "@nodeutils/defaults-deep": "^1.1.0",
     "electron": "^34.3.0",
+    "libp2p": "^2.8.0",
+    "react-toggle-slider": "^0.4.1",
     "wait-on": "^8.0.2"
   },
   "devDependencies": {
