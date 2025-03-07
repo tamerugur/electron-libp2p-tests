@@ -44,7 +44,7 @@ app.on("window-all-closed", () => {
 async function startRelay() {
   const server = await createLibp2p({
     addresses: {
-      listen: ["/ip4/0.0.0.0/tcp/0/ws"],
+      listen: ["/ip4/10.76.120.47/tcp/51357/ws"],
     },
     transports: [
       webSockets({
