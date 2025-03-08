@@ -44,17 +44,12 @@ app.on("window-all-closed", () => {
 async function startRelay() {
   const server = await createLibp2p({
     addresses: {
-      listen: ["/ip4/10.76.120.47/tcp/51357/ws"],
+      listen: ["/ip4/192.168.56.1/tcp/51357/ws"],
     },
-    transports: [
-      webSockets({
-        websocket: {
-          onError: (err) => {
-            console.error("WebSocket error:", err);
-          },
-        },
-      }),
-    ],
+    transports: [webSockets()],
+    connectionGater: {
+      denyDialMultiaddr: () => false,
+    },
     connectionEncrypters: [noise()],
     streamMuxers: [yamux()],
     services: {
@@ -64,9 +59,6 @@ async function startRelay() {
           maxReservations: Infinity,
         },
       }),
-    },
-    connectionGater: {
-      denyDialMultiaddr: () => false,
     },
   });
 
