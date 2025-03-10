@@ -3,18 +3,50 @@ import { useState } from "react";
 function Server(props) {
   const [isToggled, setIsToggled] = useState(false);
   const [multiaddrs, setMultiaddrs] = useState([]);
+  const [tunnelUrl, setTunnelUrl] = useState("");
   const [loading, setLoading] = useState(false);
-
+  const [relayAddr, setRelayAddr] = useState("");
+  const [message, setMessage] = useState("");
   const handleStartServer = async () => {
     setLoading(true);
     try {
-      // Call the exposed method from preload.js
-      const addresses = await window.electronAPI.startRelay(); // Use window.electronAPI
-      setMultiaddrs(addresses);
+      const result = await window.electronAPI.startRelay();
+      setMultiaddrs(result.multiaddrs);
+      setTunnelUrl(result.tunnelUrl);
+
+      // Create node after relay is started
+      // await window.electronAPI.createNode();
     } catch (error) {
       console.error("Failed to start relay:", error);
     }
     setLoading(false);
+  };
+
+  const handleUrlSubmit = async (event) => {
+    event.preventDefault();
+
+    // Check if relayAddr is empty or just whitespace
+    if (!relayAddr || relayAddr.trim() === "") {
+      setMessage("Please enter a relay address");
+      return;
+    }
+
+    console.log("Submitting relayAddr:", relayAddr);
+
+    try {
+      console.log("Creating node with relayAddr:", relayAddr);
+      const response = await window.electronAPI.createNode(relayAddr);
+      console.log("Node created:", response);
+
+      if (response.error) {
+        setMessage(`Failed to create node: ${response.error}`);
+      } else {
+        setMessage("Node created successfully!");
+      }
+    } catch (error) {
+      console.error("Failed to create node:", error);
+      setMessage(`Failed to create node: ${error.message}`);
+    }
   };
 
   return (
@@ -115,6 +147,26 @@ function Server(props) {
           >
             {loading ? "Starting Server..." : "Start the Server"}
           </button>
+
+          {tunnelUrl && (
+            <div>
+              <h2>Tunnel URL</h2>
+              <p style={{ wordBreak: "break-word" }}>{tunnelUrl}</p>
+              <h2>Enter Relay Address</h2>
+              <form onSubmit={handleUrlSubmit}>
+                <input
+                  type="text"
+                  value={relayAddr}
+                  onChange={(e) => setRelayAddr(e.target.value)}
+                  placeholder="Enter Relay URL"
+                  style={{ width: "300px" }}
+                />
+                <button type="submit">Submit</button>
+              </form>
+              {message && <p>{message}</p>}
+            </div>
+          )}
+
           <h2>Server Multiaddrs</h2>
           {multiaddrs.length > 0 ? (
             <ul>

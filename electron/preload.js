@@ -8,4 +8,6 @@ electron_1.contextBridge.exposeInMainWorld("electronAPI", {
     electron: () => process.versions.electron,
   },
   startRelay: () => electron_1.ipcRenderer.invoke("start-relay"),
+  createNode: (relayAddr) =>
+    electron_1.ipcRenderer.invoke("create-node", relayAddr),
 });
