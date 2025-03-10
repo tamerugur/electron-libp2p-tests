@@ -153,15 +153,35 @@ function Server(props) {
               <h2>Tunnel URL</h2>
               <p style={{ wordBreak: "break-word" }}>{tunnelUrl}</p>
               <h2>Enter Relay Address</h2>
-              <form onSubmit={handleUrlSubmit}>
+              <form onSubmit={handleUrlSubmit} style={{ display: 'flex', gap: '10px' }}>
                 <input
                   type="text"
                   value={relayAddr}
                   onChange={(e) => setRelayAddr(e.target.value)}
                   placeholder="Enter Relay URL"
-                  style={{ width: "300px" }}
+                  style={{
+                    width: "300px",
+                    padding: "10px",
+                    fontSize: "16px",
+                    outline: "none",
+                    border: "1px solid #363940",
+                    backgroundColor: "#363940",
+                    color: "white"
+                  }}
                 />
-                <button type="submit">Submit</button>
+                <button 
+                  type="submit"
+                  style={{
+                    backgroundColor: "#5865F2",
+                    color: "white",
+                    padding: "10px 20px",
+                    border: "none",
+                    borderRadius: "5px",
+                    cursor: "pointer"
+                  }}
+                >
+                  Submit
+                </button>
               </form>
               {message && <p>{message}</p>}
             </div>

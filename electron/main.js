@@ -12,7 +12,6 @@ import { circuitRelayTransport } from "@libp2p/circuit-relay-v2";
 import localtunnel from "localtunnel";
 import { multiaddr, protocols } from "@multiformats/multiaddr";
 import { ping } from "@libp2p/ping";
-import * as filters from "@libp2p/websockets/filters";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -71,7 +70,7 @@ async function startRelay() {
     addresses: {
       listen: ["/ip4/0.0.0.0/tcp/51357/ws"],
     },
-    transports: [webSockets()],
+    transports: [webSockets(), circuitRelayTransport()],
     connectionGater: {
       denyDialMultiaddr: () => false,
     },
@@ -143,6 +142,15 @@ async function createNode(relayAddr) {
   console.log("Checking multiaddrs...");
   const multiaddrs = node.getMultiaddrs();
   console.log("All multiaddrs:", multiaddrs);
-
+  dialPeer(node, multiaddrs[0].toString());
   return multiaddrs.map((ma) => ma.toString());
+}
+
+async function dialPeer(node, peerMultiaddr) {
+  try {
+    await node.dial(multiaddr(peerMultiaddr));
+    console.log("Connection established to the peer!");
+  } catch (err) {
+    console.error("Failed to dial peer:", err);
+  }
 }
