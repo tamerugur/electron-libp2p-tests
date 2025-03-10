@@ -14,7 +14,7 @@ import { multiaddr, protocols } from "@multiformats/multiaddr";
 import { ping } from "@libp2p/ping";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
+var connectedPeers = new Map();
 function createWindow() {
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;
   const mainWindow = new BrowserWindow({
@@ -51,6 +51,27 @@ app.whenReady().then(() => {
       return { error: err.message };
     }
   });
+
+  ipcMain.handle("dial-peer", async (_, node, peerMultiaddr) => {
+    try {
+      await dialPeer(node, peerMultiaddr);
+      return { success: true };
+    } catch (err) {
+      console.error("Error dialing peer:", err);
+      return { error: err.message };
+    }
+  });
+
+  ipcMain.handle("register-peer", (_, peerId, multiaddr) => {
+    connectedPeers.set(peerId, multiaddr);
+    console.log(`Peer registered: ${peerId} -> ${multiaddr}`);
+    return { success: true };
+  });
+
+  ipcMain.handle("get-peers", () => {
+    return Array.from(connectedPeers.entries());
+  });
+
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow();
@@ -108,8 +129,27 @@ async function createNode(relayAddr) {
   console.log("Creating Libp2p node...");
 
   const node = await createLibp2p({
-    addresses: { listen: ["/p2p-circuit", "/webrtc"] },
-    transports: [webSockets(), webRTC(), circuitRelayTransport()],
+    addresses: {
+      listen: [
+        "/p2p-circuit",
+        "/webrtc",
+        "/p2p-circuit/webrtc",
+        "/ip4/0.0.0.0/tcp/0/ws",
+      ],
+    },
+    transports: [
+      webSockets(),
+      webRTC({
+        rtcConfiguration: {
+          iceServers: [
+            { urls: ["stun:stun.l.google.com:19302"] },
+            { urls: ["stun:global.stun.twilio.com:3478"] },
+          ],
+        },
+      }),
+      ,
+      circuitRelayTransport(),
+    ],
     connectionEncrypters: [noise()],
     streamMuxers: [yamux()],
     connectionGater: { denyDialMultiaddr: () => false },
@@ -129,6 +169,13 @@ async function createNode(relayAddr) {
       console.log(`Dialing relay: ${relayAddr}`);
       await node.dial(multiaddr(relayAddr));
       console.log("Connected to relay!");
+
+      // Register the peer in the connectedPeers map
+      const peerId = node.peerId.toString();
+      const multiaddrs = node.getMultiaddrs().map((ma) => ma.toString());
+
+      connectedPeers.set(peerId, multiaddrs);
+      console.log(`Registered peer: ${peerId} -> ${multiaddrs}`);
     } catch (err) {
       console.error("Failed to connect to relay:", err);
     }
@@ -142,7 +189,6 @@ async function createNode(relayAddr) {
   console.log("Checking multiaddrs...");
   const multiaddrs = node.getMultiaddrs();
   console.log("All multiaddrs:", multiaddrs);
-  dialPeer(node, multiaddrs[0].toString());
   return multiaddrs.map((ma) => ma.toString());
 }
 

@@ -7,6 +7,7 @@ function Server(props) {
   const [loading, setLoading] = useState(false);
   const [relayAddr, setRelayAddr] = useState("");
   const [message, setMessage] = useState("");
+  const [peers, setPeers] = useState([]);
   const handleStartServer = async () => {
     setLoading(true);
     try {
@@ -49,6 +50,16 @@ function Server(props) {
     }
   };
 
+  async function getPeers() {
+    try {
+      const peersList = await window.electronAPI.getPeers();
+      console.log("Available peers:", peersList);
+      setPeers(peersList);
+    } catch (error) {
+      console.error("Failed to get peers:", error);
+    }
+  }
+
   return (
     <div
       style={{
@@ -61,6 +72,7 @@ function Server(props) {
         backgroundColor: "#303136",
         borderTopRightRadius: "10px",
         borderBottomRightRadius: "10px",
+        overflow: "auto",
       }}
     >
       <div
@@ -118,11 +130,19 @@ function Server(props) {
           }}
         >
           <h1>Join a Server</h1>
+
           <p>Server IP: </p>
           <p>Server Port: </p>
         </div>
       ) : (
-        <div style={{ padding: "0 30px" }}>
+        <div
+          style={{
+            padding: "0 30px",
+            width: "100%",
+            maxWidth: "calc(100% - 60px)",
+            boxSizing: "border-box",
+          }}
+        >
           <p>
             Create your server and share your IP with your friend to start
             chatting!
@@ -153,7 +173,10 @@ function Server(props) {
               <h2>Tunnel URL</h2>
               <p style={{ wordBreak: "break-word" }}>{tunnelUrl}</p>
               <h2>Enter Relay Address</h2>
-              <form onSubmit={handleUrlSubmit} style={{ display: 'flex', gap: '10px' }}>
+              <form
+                onSubmit={handleUrlSubmit}
+                style={{ display: "flex", gap: "10px" }}
+              >
                 <input
                   type="text"
                   value={relayAddr}
@@ -166,10 +189,10 @@ function Server(props) {
                     outline: "none",
                     border: "1px solid #363940",
                     backgroundColor: "#363940",
-                    color: "white"
+                    color: "white",
                   }}
                 />
-                <button 
+                <button
                   type="submit"
                   style={{
                     backgroundColor: "#5865F2",
@@ -177,7 +200,7 @@ function Server(props) {
                     padding: "10px 20px",
                     border: "none",
                     borderRadius: "5px",
-                    cursor: "pointer"
+                    cursor: "pointer",
                   }}
                 >
                   Submit
@@ -189,9 +212,23 @@ function Server(props) {
 
           <h2>Server Multiaddrs</h2>
           {multiaddrs.length > 0 ? (
-            <ul>
+            <ul
+              style={{
+                listStyle: "none",
+                padding: 0,
+                margin: 0,
+                width: "100%",
+              }}
+            >
               {multiaddrs.map((addr, index) => (
-                <li key={index} style={{ wordBreak: "break-word" }}>
+                <li
+                  key={index}
+                  style={{
+                    wordBreak: "break-word",
+                    whiteSpace: "pre-wrap",
+                    marginBottom: "10px",
+                  }}
+                >
                   {addr}
                 </li>
               ))}
@@ -199,6 +236,38 @@ function Server(props) {
           ) : (
             !loading && <p>No server running.</p>
           )}
+
+          <div style={{ width: "100%" }}>
+            <h2>Available Peers</h2>
+            <button style={{ backgroundColor: "#5865F2" }} onClick={getPeers}>
+              Get Peers
+            </button>
+            <ul
+              style={{
+                listStyle: "none",
+                padding: 0,
+                margin: 0,
+                width: "100%",
+              }}
+            >
+              {peers.length > 0 ? (
+                peers.map(([peerId, addr], index) => (
+                  <li
+                    key={index}
+                    style={{
+                      wordBreak: "break-word",
+                      whiteSpace: "pre-wrap",
+                      marginBottom: "10px",
+                    }}
+                  >
+                    <strong>{peerId}</strong>: {addr}
+                  </li>
+                ))
+              ) : (
+                <li>No peers found</li>
+              )}
+            </ul>
+          </div>
         </div>
       )}
     </div>
