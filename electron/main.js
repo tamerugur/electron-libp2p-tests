@@ -15,6 +15,7 @@ import { ping } from "@libp2p/ping";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 var connectedPeers = new Map();
+let libp2pNode = null;
 function createWindow() {
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;
   const mainWindow = new BrowserWindow({
@@ -128,7 +129,7 @@ const WEBRTC_CODE = protocols("webrtc").code;
 async function createNode(relayAddr) {
   console.log("Creating Libp2p node...");
 
-  const node = await createLibp2p({
+  libp2pNode = await createLibp2p({
     addresses: {
       listen: [
         "/p2p-circuit",
@@ -161,18 +162,18 @@ async function createNode(relayAddr) {
   });
 
   console.log("Node created, starting...");
-  await node.start();
+  await libp2pNode.start();
   console.log("Node started!");
 
   if (relayAddr) {
     try {
       console.log(`Dialing relay: ${relayAddr}`);
-      await node.dial(multiaddr(relayAddr));
+      await libp2pNode.dial(multiaddr(relayAddr));
       console.log("Connected to relay!");
 
       // Register the peer in the connectedPeers map
-      const peerId = node.peerId.toString();
-      const multiaddrs = node.getMultiaddrs().map((ma) => ma.toString());
+      const peerId = libp2pNode.peerId.toString();
+      const multiaddrs = libp2pNode.getMultiaddrs().map((ma) => ma.toString());
 
       connectedPeers.set(peerId, multiaddrs);
       console.log(`Registered peer: ${peerId} -> ${multiaddrs}`);
@@ -187,14 +188,16 @@ async function createNode(relayAddr) {
   await new Promise((resolve) => setTimeout(resolve, 2000));
 
   console.log("Checking multiaddrs...");
-  const multiaddrs = node.getMultiaddrs();
+  const multiaddrs = libp2pNode
+    .getMultiaddrs()
+    .filter((ma) => ma.toString().includes("p2p-circuit"));
   console.log("All multiaddrs:", multiaddrs);
   return multiaddrs.map((ma) => ma.toString());
 }
 
-async function dialPeer(node, peerMultiaddr) {
+async function dialPeer(peerMultiaddr) {
   try {
-    await node.dial(multiaddr(peerMultiaddr));
+    await libp2pNode.dial(multiaddr(peerMultiaddr));
     console.log("Connection established to the peer!");
   } catch (err) {
     console.error("Failed to dial peer:", err);
