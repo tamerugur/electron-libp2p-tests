@@ -8,12 +8,14 @@ function Server(props) {
   const [relayAddr, setRelayAddr] = useState("");
   const [message, setMessage] = useState("");
   const [peers, setPeers] = useState([]);
+  const [peerDialAddr, setPeerDialAddr] = useState("");
+  const [dialMessage, setDialMessage] = useState("");
   const handleStartServer = async () => {
     setLoading(true);
     try {
       const result = await window.electronAPI.startRelay();
       setMultiaddrs(result.multiaddrs);
-      setTunnelUrl(result.tunnelUrl);
+      setTunnelUrl(result.ngrokUrl);
 
       // Create node after relay is started
       // await window.electronAPI.createNode();
@@ -47,6 +49,34 @@ function Server(props) {
     } catch (error) {
       console.error("Failed to create node:", error);
       setMessage(`Failed to create node: ${error.message}`);
+    }
+  };
+
+  const handleDialPeer = async () => {
+    if (!peerDialAddr.trim()) {
+      setDialMessage("Please enter a valid peer address.");
+      return;
+    }
+    setDialMessage("Dialing peer...");
+    try {
+      const response = await window.electronAPI.dialPeer(peerDialAddr);
+      if (response.error) {
+        setDialMessage(`Failed to dial peer: ${response.error}`);
+      } else {
+        setDialMessage("Successfully connected to peer!");
+
+        const switchResponse = await window.electronAPI.switchToWebRTC(
+          peerDialAddr
+        );
+        if (switchResponse.error) {
+          setDialMessage(`Failed to switch to WebRTC: ${switchResponse.error}`);
+        } else {
+          setDialMessage("Switched to WebRTC successfully!");
+        }
+      }
+    } catch (error) {
+      console.error("Failed to dial peer:", error);
+      setDialMessage(`Failed to dial peer: ${error.message}`);
     }
   };
 
@@ -270,6 +300,39 @@ function Server(props) {
           </div>
         </div>
       )}
+
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          backgroundColor: "#303136",
+          padding: "20px",
+          borderRadius: "10px",
+        }}
+      >
+        <h2>Dial a Peer</h2>
+        <input
+          type="text"
+          value={peerDialAddr}
+          onChange={(e) => setPeerDialAddr(e.target.value)}
+          placeholder="Enter Peer Multiaddr"
+          style={{ padding: "10px", width: "300px", marginBottom: "10px" }}
+        />
+        <button
+          onClick={handleDialPeer}
+          style={{
+            backgroundColor: "#5865F2",
+            color: "white",
+            padding: "10px 20px",
+            borderRadius: "5px",
+            cursor: "pointer",
+          }}
+        >
+          Dial Peer
+        </button>
+        {dialMessage && <p>{dialMessage}</p>}
+      </div>
     </div>
   );
 }

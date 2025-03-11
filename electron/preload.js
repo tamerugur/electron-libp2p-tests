@@ -10,9 +10,9 @@ electron_1.contextBridge.exposeInMainWorld("electronAPI", {
   startRelay: () => electron_1.ipcRenderer.invoke("start-relay"),
   createNode: (relayAddr) =>
     electron_1.ipcRenderer.invoke("create-node", relayAddr),
-  dialpeer: (node, peerMultiaddr) =>
+  switchToWebRTC: (peerMultiaddr) =>
+    electron_1.ipcRenderer.invoke("switch-to-webrtc", peerMultiaddr),
+  dialPeer: (node, peerMultiaddr) =>
     electron_1.ipcRenderer.invoke("dial-peer", node, peerMultiaddr),
-  registerPeer: (peerId, multiaddr) =>
-    electron_1.ipcRenderer.invoke("register-peer", peerId, multiaddr),
   getPeers: () => electron_1.ipcRenderer.invoke("get-peers"),
 });
