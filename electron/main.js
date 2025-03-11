@@ -45,17 +45,21 @@ app.whenReady().then(() => {
 
   ipcMain.handle("create-node", async (_, relayAddr) => {
     try {
-      const multiaddrs = await createNode(relayAddr);
-      return multiaddrs;
+      return await createNode(relayAddr);
     } catch (err) {
       console.error("Error creating node:", err);
       return { error: err.message };
     }
   });
 
-  ipcMain.handle("dial-peer", async (_, node, peerMultiaddr) => {
+  ipcMain.handle("dial-peer", async (_, peerMultiaddr) => {
+    if (!libp2pNode) {
+      console.error("Libp2p node not initialized.");
+      return { error: "Node not initialized" };
+    }
     try {
-      await dialPeer(node, peerMultiaddr);
+      await libp2pNode.dial(multiaddr(peerMultiaddr));
+      console.log(`Successfully connected to peer: ${peerMultiaddr}`);
       return { success: true };
     } catch (err) {
       console.error("Error dialing peer:", err);
@@ -196,10 +200,16 @@ async function createNode(relayAddr) {
 }
 
 async function dialPeer(peerMultiaddr) {
+  if (!libp2pNode) {
+    console.error("Libp2p node not initialized.");
+    return { error: "Node not initialized" };
+  }
   try {
     await libp2pNode.dial(multiaddr(peerMultiaddr));
     console.log("Connection established to the peer!");
+    return { success: true };
   } catch (err) {
     console.error("Failed to dial peer:", err);
+    return { error: err.message };
   }
 }
