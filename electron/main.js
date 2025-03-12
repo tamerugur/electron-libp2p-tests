@@ -204,7 +204,7 @@ async function dialPeer(peerMultiaddr) {
   }
   try {
     await libp2pNode.dial(multiaddr(peerMultiaddr));
-    console.log("Connection established to the peer!");
+    console.log("Connection established to the peer!"); 
     return { success: true };
   } catch (err) {
     console.error("Failed to dial peer:", err);

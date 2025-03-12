@@ -90,6 +90,17 @@ function Server(props) {
     }
   }
 
+  const handleCreateNode = async () => {
+    try {
+      const addrs = await window.electronAPI.createNode();
+      console.log("Node created:", addrs);
+      setMessage("Node created successfully without relay!");
+    } catch (error) {
+      console.error("Failed to create node:", error);
+      setMessage(`Failed to create node: ${error.message}`);
+    }
+  };
+
   return (
     <div
       style={{
@@ -196,6 +207,28 @@ function Server(props) {
             onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
           >
             {loading ? "Starting Server..." : "Start the Server"}
+          </button>
+
+          <button
+            onClick={handleCreateNode}
+            style={{
+              backgroundColor: "#5865F2",
+              color: "white",
+              padding: "10px 20px",
+              border: "none",
+              borderRadius: "5px",
+              cursor: "pointer",
+              marginBottom: "20px",
+              marginLeft: "10px",
+              transition: "transform 0.1s",
+            }}
+            onMouseDown={(e) =>
+              (e.currentTarget.style.transform = "scale(0.95)")
+            }
+            onMouseUp={(e) => (e.currentTarget.style.transform = "scale(1)")}
+            onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
+          >
+            Create Node (No Relay)
           </button>
 
           {tunnelUrl && (
