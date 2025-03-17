@@ -58,18 +58,7 @@ app.whenReady().then(() => {
     }
   });
   ipcMain.handle("dial-peer", async (_, peerMultiaddr) => {
-    if (!libp2pNode) {
-      console.error("Libp2p node not initialized.");
-      return { error: "Node not initialized" };
-    }
-    try {
-      await libp2pNode.dial(multiaddr(peerMultiaddr));
-      console.log(`Successfully connected to peer: ${peerMultiaddr}`);
-      return { success: true };
-    } catch (err) {
-      console.error("Error dialing peer:", err);
-      return { error: err.message };
-    }
+    return await dialPeer(peerMultiaddr);
   });
   ipcMain.handle("switch-to-webrtc", async (_, peerMultiaddr) => {
     try {
@@ -91,16 +80,26 @@ app.on("window-all-closed", () => {
 async function startRelay() {
   const server = await createLibp2p({
     addresses: {
-      listen: ["/ip4/0.0.0.0/tcp/51357/ws"],
+      listen: ["/ip4/0.0.0.0/tcp/51357/ws", "/webrtc", "/p2p-circuit/webrtc"],
     },
-    transports: [webSockets(), circuitRelayTransport()],
-    connectionGater: {
-      denyDialMultiaddr: () => false,
-    },
+    transports: [
+      webSockets(),
+      webRTC({
+        rtcConfiguration: {
+          iceServers: [
+            { urls: ["stun:stun.l.google.com:19302"] },
+            { urls: ["stun:global.stun.twilio.com:3478"] },
+          ],
+        },
+      }),
+      circuitRelayTransport(),
+    ],
     connectionEncrypters: [noise()],
     streamMuxers: [yamux()],
+    connectionGater: { denyDialMultiaddr: () => false },
     services: {
       identify: identify(),
+      identifyPush: identifyPush(),
       relay: circuitRelayServer({
         reservations: { maxReservations: Infinity },
         hop: { enabled: true },
@@ -108,25 +107,26 @@ async function startRelay() {
     },
   });
 
-  const multiaddrs = server.getMultiaddrs().map((ma) => ma.toString());
-  console.log("Listening multiaddrs:", multiaddrs);
+  await server.start();
+  const serverMultiaddrs = server.getMultiaddrs().map((ma) => ma.toString());
 
   try {
     const url = await ngrok.connect({ proto: "http", addr: 51357 });
-    console.log(`Ngrok is running at ${url}`);
+    const ngrokAddr =
+      url.replace("https://", "/dns4/").replace("http://", "/dns4/") +
+      "/tcp/443/wss";
+    const fullAddr = `${ngrokAddr}/p2p/${server.peerId.toString()}`;
 
     return {
-      multiaddrs: multiaddrs,
-      ngrokUrl:
-        url.replace("https://", "/dns4/").replace("http://", "/dns4/") +
-        "/tcp/443/wss",
+      multiaddrs: serverMultiaddrs,
+      ngrokUrl: ngrokAddr,
+      clientAddr: fullAddr,
     };
   } catch (err) {
-    console.error("Error starting Ngrok:", err);
+    console.error("Error in relay setup:", err);
     return { error: err.message };
   }
 }
-
 async function createNode(relayAddr) {
   console.log("Creating Libp2p node...");
 
@@ -186,14 +186,78 @@ async function createNode(relayAddr) {
 async function switchToWebRTC(peerMultiaddr) {
   try {
     console.log(`Dialing peer directly via WebRTC: ${peerMultiaddr}`);
-    await libp2pNode.dial(multiaddr(peerMultiaddr));
-    console.log("WebRTC connection established!");
 
-    console.log("Shutting down relay...");
-    await libp2pNode.hangUp(multiaddr(peerMultiaddr)); // Disconnect relay
-    console.log("Relay shut down, WebRTC active!");
+    if (!peerMultiaddr) {
+      throw new Error("Error: peerMultiaddr is undefined or null");
+    }
+
+    const ma = multiaddr(peerMultiaddr);
+    if (!ma.toString().includes("/p2p/")) {
+      throw new Error("Error: Invalid multiaddr format, missing /p2p/");
+    }
+
+    const peerId = ma.getPeerId();
+    console.log("Extracted Peer ID:", peerId);
+
+    // Get all peers from the peer store
+    const peers = Array.from(await libp2pNode.peerStore.all());
+    console.log(
+      "Known peers:",
+      peers.map((peer) => peer.id.toString())
+    );
+
+    // Find the peer info
+    const peerInfo = peers.find((peer) => peer.id.toString() === peerId);
+
+    if (!peerInfo) {
+      console.log(`Peer ${peerId} not found in store, attempting to dial...`);
+      await libp2pNode.dial(ma);
+      await new Promise((resolve) => setTimeout(resolve, 2000)); // Wait for connection
+    }
+
+    // Check if WebRTC is supported
+    const connections = libp2pNode.getConnections(peerId);
+    console.log("Current connections:", connections);
+
+    if (!connections || connections.length === 0) {
+      throw new Error("No connections found for peer");
+    }
+
+    const hasWebRTC = connections.some((conn) => {
+      if (!conn || !conn.remotePeer) return false;
+
+      // Safely check for WebRTC streams
+      const streams = conn.streams || [];
+      return streams.some((stream) => {
+        return (
+          stream &&
+          stream.protocol &&
+          typeof stream.protocol === "string" &&
+          stream.protocol.includes("webrtc")
+        );
+      });
+    });
+
+    if (hasWebRTC) {
+      console.log("WebRTC connection established!");
+
+      // Close relay connections
+      const relayConnections = connections.filter(
+        (conn) =>
+          conn.remoteAddr && conn.remoteAddr.toString().includes("/p2p-circuit")
+      );
+
+      for (const conn of relayConnections) {
+        await conn.close();
+      }
+
+      console.log("Relay connections closed, WebRTC active!");
+    } else {
+      console.warn("WebRTC connection not confirmed, keeping relay active.");
+    }
   } catch (err) {
     console.error("Failed to switch to WebRTC:", err);
+    throw err;
   }
 }
 
@@ -204,7 +268,7 @@ async function dialPeer(peerMultiaddr) {
   }
   try {
     await libp2pNode.dial(multiaddr(peerMultiaddr));
-    console.log("Connection established to the peer!"); 
+    console.log("Connection established to the peer!");
     return { success: true };
   } catch (err) {
     console.error("Failed to dial peer:", err);

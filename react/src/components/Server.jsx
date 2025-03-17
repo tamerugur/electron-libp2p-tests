@@ -3,6 +3,7 @@ import { useState } from "react";
 function Server(props) {
   const [isToggled, setIsToggled] = useState(false);
   const [multiaddrs, setMultiaddrs] = useState([]);
+  const [clientAddr, setClientAddr] = useState("");
   const [tunnelUrl, setTunnelUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [relayAddr, setRelayAddr] = useState("");
@@ -16,7 +17,7 @@ function Server(props) {
       const result = await window.electronAPI.startRelay();
       setMultiaddrs(result.multiaddrs);
       setTunnelUrl(result.ngrokUrl);
-
+      setClientAddr(result.clientAddr);
       // Create node after relay is started
       // await window.electronAPI.createNode();
     } catch (error) {
@@ -64,14 +65,14 @@ function Server(props) {
         setDialMessage(`Failed to dial peer: ${response.error}`);
       } else {
         setDialMessage("Successfully connected to peer!");
-
+        console.log("peerdialaddr", peerDialAddr);
         const switchResponse = await window.electronAPI.switchToWebRTC(
           peerDialAddr
         );
         if (switchResponse.error) {
           setDialMessage(`Failed to switch to WebRTC: ${switchResponse.error}`);
         } else {
-          setDialMessage("Switched to WebRTC successfully!");
+          setDialMessage("Switched to WebRTC successfully! " + switchResponse);
         }
       }
     } catch (error) {
@@ -272,7 +273,19 @@ function Server(props) {
               {message && <p>{message}</p>}
             </div>
           )}
-
+          <h2>ClientAddr</h2>
+          <p
+            style={{
+              listStyle: "none",
+              padding: 0,
+              margin: 0,
+              width: "100%",
+              wordBreak: "break-word",
+              whiteSpace: "pre-wrap",
+            }}
+          >
+            {clientAddr}
+          </p>
           <h2>Server Multiaddrs</h2>
           {multiaddrs.length > 0 ? (
             <ul
