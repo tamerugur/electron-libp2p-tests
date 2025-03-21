@@ -3,7 +3,6 @@ import { useState } from "react";
 function Server(props) {
   const [isToggled, setIsToggled] = useState(false);
   const [multiaddrs, setMultiaddrs] = useState([]);
-  const [clientAddr, setClientAddr] = useState("");
   const [tunnelUrl, setTunnelUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [relayAddr, setRelayAddr] = useState("");
@@ -15,9 +14,7 @@ function Server(props) {
     setLoading(true);
     try {
       const result = await window.electronAPI.startRelay();
-      setMultiaddrs(result.multiaddrs);
       setTunnelUrl(result.ngrokUrl);
-      setClientAddr(result.clientAddr);
       // Create node after relay is started
       // await window.electronAPI.createNode();
     } catch (error) {
@@ -40,8 +37,9 @@ function Server(props) {
     try {
       console.log("Creating node with relayAddr:", relayAddr);
       const response = await window.electronAPI.createNode(relayAddr);
+      setMultiaddrs(response.relayMultiaddr);
       console.log("Node created:", response);
-
+      console.log(response.relayMultiaddr);
       if (response.error) {
         setMessage(`Failed to create node: ${response.error}`);
       } else {
@@ -273,21 +271,8 @@ function Server(props) {
               {message && <p>{message}</p>}
             </div>
           )}
-          <h2>ClientAddr</h2>
-          <p
-            style={{
-              listStyle: "none",
-              padding: 0,
-              margin: 0,
-              width: "100%",
-              wordBreak: "break-word",
-              whiteSpace: "pre-wrap",
-            }}
-          >
-            {clientAddr}
-          </p>
           <h2>Server Multiaddrs</h2>
-          {multiaddrs.length > 0 ? (
+          {multiaddrs ? (
             <ul
               style={{
                 listStyle: "none",
@@ -296,18 +281,18 @@ function Server(props) {
                 width: "100%",
               }}
             >
-              {multiaddrs.map((addr, index) => (
+
                 <li
-                  key={index}
+                  key={multiaddrs}
                   style={{
                     wordBreak: "break-word",
                     whiteSpace: "pre-wrap",
                     marginBottom: "10px",
                   }}
                 >
-                  {addr}
+                  {multiaddrs}
                 </li>
-              ))}
+
             </ul>
           ) : (
             !loading && <p>No server running.</p>

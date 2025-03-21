@@ -17,10 +17,13 @@ import { fromString } from "uint8arrays";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const CHAT_PROTOCOL = "/libp2p/examples/chat/1.0.0";
 
-var connectedPeers = new Map();
+const CHAT_PROTOCOL = "/libp2p/examples/chat/1.0.0";
+const signal = AbortSignal.timeout(5000);
+let chatStream;
+let ma;
 let libp2pNode = null;
+const WEBRTC_CODE = protocols("webrtc").code;
 
 function createWindow() {
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;
@@ -108,19 +111,17 @@ async function startRelay() {
   });
 
   await server.start();
-  const serverMultiaddrs = server.getMultiaddrs().map((ma) => ma.toString());
+  // const serverMultiaddrs = server.getMultiaddrs().map((ma) => ma.toString());
 
   try {
     const url = await ngrok.connect({ proto: "http", addr: 51357 });
     const ngrokAddr =
       url.replace("https://", "/dns4/").replace("http://", "/dns4/") +
       "/tcp/443/wss";
-    const fullAddr = `${ngrokAddr}/p2p/${server.peerId.toString()}`;
 
     return {
-      multiaddrs: serverMultiaddrs,
+      // multiaddrs: serverMultiaddrs,
       ngrokUrl: ngrokAddr,
-      clientAddr: fullAddr,
     };
   } catch (err) {
     console.error("Error in relay setup:", err);
@@ -128,6 +129,7 @@ async function startRelay() {
   }
 }
 async function createNode(relayAddr) {
+  let relayMultiaddr;
   console.log("Creating Libp2p node...");
 
   libp2pNode = await createLibp2p({
@@ -139,18 +141,7 @@ async function createNode(relayAddr) {
         "/ip4/0.0.0.0/tcp/0/ws",
       ],
     },
-    transports: [
-      webSockets(),
-      webRTC({
-        rtcConfiguration: {
-          iceServers: [
-            { urls: ["stun:stun.l.google.com:19302"] },
-            { urls: ["stun:global.stun.twilio.com:3478"] },
-          ],
-        },
-      }),
-      circuitRelayTransport(),
-    ],
+    transports: [webSockets(), webRTC(), circuitRelayTransport()],
     connectionEncrypters: [noise()],
     streamMuxers: [yamux()],
     connectionGater: { denyDialMultiaddr: () => false },
@@ -165,6 +156,54 @@ async function createNode(relayAddr) {
   await libp2pNode.start();
   console.log("Node started!");
 
+  function updateConnList() {
+    libp2pNode.getConnections().forEach((connection) => {
+      // Check if the connection has the WebRTC protocol
+      if (connection.remoteAddr.protoCodes().includes(WEBRTC_CODE)) {
+        // 0x0014 is WebRTC's protocol code
+        const ma = connection.remoteAddr;
+        console.log("WebRTC connection:", ma.toString());
+      } else {
+        console.log("Connection:", connection.remoteAddr.toString());
+      }
+    });
+  }
+
+  libp2pNode.handle(CHAT_PROTOCOL, async ({ stream }) => {
+    console.log("Received incoming stream");
+
+    // Use byteStream for both reading and writing
+    const bs = byteStream(stream);
+
+    try {
+      // Write using byteStream's .write() instead of raw sink
+      await bs.write(fromString("Hello World (incoming)"));
+      await bs.close();
+      console.log("Response sent successfully");
+    } catch (err) {
+      console.error("Failed to send:", err);
+    }
+
+    try {
+      // Read responses
+      while (true) {
+        const buf = await bs.read();
+        if (!buf || buf.length === 0) break;
+        console.log("Received:", fromString(buf));
+      }
+    } catch (err) {
+      console.error("Read error:", err);
+    }
+  });
+
+  libp2pNode.addEventListener("connection:open", (event) => {
+    updateConnList();
+  });
+
+  libp2pNode.addEventListener("connection:close", (event) => {
+    updateConnList();
+  });
+
   if (relayAddr) {
     try {
       console.log(`Dialing relay: ${relayAddr}`);
@@ -174,13 +213,22 @@ async function createNode(relayAddr) {
       await new Promise((resolve) => setTimeout(resolve, 1000));
 
       console.log("Your node's multiaddrs:");
-      libp2pNode.getMultiaddrs().forEach((ma) => console.log(ma.toString()));
+      const addrs = libp2pNode.getMultiaddrs();
+
+      addrs.forEach((ma) => {
+        const addr = ma.toString();
+        if (addr.startsWith("/dns4/") && addr.includes("/webrtc/")) {
+          console.log(addr);
+          relayMultiaddr = addr;
+        }
+      });
+      // libp2pNode.getMultiaddrs().forEach((ma) => console.log(ma.toString()));
     } catch (err) {
       console.error("Failed to connect to relay:", err);
     }
   }
 
-  return libp2pNode.getMultiaddrs().map((ma) => ma.toString());
+  return { relayMultiaddr: relayMultiaddr };
 }
 
 async function switchToWebRTC(peerMultiaddr) {
@@ -191,7 +239,7 @@ async function switchToWebRTC(peerMultiaddr) {
       throw new Error("Error: peerMultiaddr is undefined or null");
     }
 
-    const ma = multiaddr(peerMultiaddr);
+    ma = multiaddr(peerMultiaddr);
     if (!ma.toString().includes("/p2p/")) {
       throw new Error("Error: Invalid multiaddr format, missing /p2p/");
     }
@@ -227,13 +275,19 @@ async function switchToWebRTC(peerMultiaddr) {
       if (!conn || !conn.remotePeer) return false;
 
       // Safely check for WebRTC streams
+      console.log("Checking connection:");
+      console.log("ID:", conn.id);
+      console.log("Remote Address:", conn.remoteAddr.toString());
+      console.log("Remote Peer:", conn.remotePeer.toString());
+      console.log("Status:", conn.status);
+      console.log("RTT:", conn.rtt);
       const streams = conn.streams || [];
       return streams.some((stream) => {
         return (
           stream &&
           stream.protocol &&
           typeof stream.protocol === "string" &&
-          stream.protocol.includes("webrtc")
+          stream.protocol.includes(CHAT_PROTOCOL)
         );
       });
     });
@@ -262,16 +316,25 @@ async function switchToWebRTC(peerMultiaddr) {
 }
 
 async function dialPeer(peerMultiaddr) {
-  if (!libp2pNode) {
-    console.error("Libp2p node not initialized.");
-    return { error: "Node not initialized" };
-  }
   try {
-    await libp2pNode.dial(multiaddr(peerMultiaddr));
-    console.log("Connection established to the peer!");
+    const peerAddr = multiaddr(peerMultiaddr);
+    await libp2pNode.dial(peerAddr);
+
+    // Open stream and send data
+    const stream = await libp2pNode.dialProtocol(peerAddr, CHAT_PROTOCOL);
+    const bs = byteStream(stream);
+
+    // Write data and close the write side
+    await bs.write(fromString("Hello World (outgoing)"));
+    await bs.close(); // Signal end of writing
+
+    // Read the entire response
+    const buf = await bs.read();
+    console.log("Received response:", fromString(buf));
+
     return { success: true };
   } catch (err) {
-    console.error("Failed to dial peer:", err);
+    console.error("Dial error:", err);
     return { error: err.message };
   }
 }
