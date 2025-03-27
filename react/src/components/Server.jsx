@@ -58,21 +58,7 @@ function Server(props) {
     }
     setDialMessage("Dialing peer...");
     try {
-      const response = await window.electronAPI.dialPeer(peerDialAddr);
-      if (response.error) {
-        setDialMessage(`Failed to dial peer: ${response.error}`);
-      } else {
-        setDialMessage("Successfully connected to peer!");
-        console.log("peerdialaddr", peerDialAddr);
-        const switchResponse = await window.electronAPI.switchToWebRTC(
-          peerDialAddr
-        );
-        if (switchResponse.error) {
-          setDialMessage(`Failed to switch to WebRTC: ${switchResponse.error}`);
-        } else {
-          setDialMessage("Switched to WebRTC successfully! " + switchResponse);
-        }
-      }
+      await window.electronAPI.dialPeer(peerDialAddr);
     } catch (error) {
       console.error("Failed to dial peer:", error);
       setDialMessage(`Failed to dial peer: ${error.message}`);

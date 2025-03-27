@@ -1,6 +1,20 @@
+import { useState } from "react";
 import sendIcon from "../assets/sendIcon.svg";
 
 function Chat(props) {
+  const [messageToSend, setMessageToSend] = useState("");
+
+  const handleSendMessage = async () => {
+    if (!messageToSend.trim()) return;
+    try {
+      await window.electronAPI.sendMessage(messageToSend);
+      console.log("Message sent:", messageToSend);
+      setMessageToSend("");
+    } catch (error) {
+      console.error("Failed to send message:", error);
+    }
+  };
+
   return (
     <div
       style={{
@@ -30,6 +44,8 @@ function Chat(props) {
       >
         <input
           type="text"
+          value={messageToSend}
+          onChange={(e) => setMessageToSend(e.target.value)}
           style={{
             width: `${props.chatWidth}`,
             padding: "12px",
@@ -46,6 +62,7 @@ function Chat(props) {
           placeholder="Type your message..."
         />
         <button
+          onClick={handleSendMessage}
           style={{
             position: "absolute",
             right: "8px",

@@ -73,6 +73,9 @@ app.whenReady().then(() => {
       return { error: err.message };
     }
   });
+  ipcMain.handle("send-message", async (_, message) => {
+    return await sendMessage(message);
+  });
 });
 
 app.on("window-all-closed", () => {
@@ -162,8 +165,9 @@ async function createNode(relayAddr) {
       // Check if the connection has the WebRTC protocol
       if (connection.remoteAddr.protoCodes().includes(WEBRTC_CODE)) {
         // 0x0014 is WebRTC's protocol code
-        const ma = connection.remoteAddr;
+        ma = connection.remoteAddr;
         console.log("WebRTC connection:", ma.toString());
+        console.log("plain ma ", ma);
       } else {
         console.log("Connection:", connection.remoteAddr.toString());
       }
@@ -259,11 +263,11 @@ async function switchToWebRTC(peerMultiaddr) {
 
       // Safely check for WebRTC streams
       console.log("Checking connection:");
-      console.log("ID:", conn.id);
-      console.log("Remote Address:", conn.remoteAddr.toString());
-      console.log("Remote Peer:", conn.remotePeer.toString());
-      console.log("Status:", conn.status);
-      console.log("RTT:", conn.rtt);
+      // console.log("ID:", conn.id);
+      // console.log("Remote Address:", conn.remoteAddr.toString());
+      // console.log("Remote Peer:", conn.remotePeer.toString());
+      // console.log("Status:", conn.status);
+      // console.log("RTT:", conn.rtt);
       const streams = conn.streams || [];
       return streams.some((stream) => {
         return (
@@ -289,6 +293,10 @@ async function switchToWebRTC(peerMultiaddr) {
       }
 
       console.log("Relay connections closed, WebRTC active!");
+
+      const webrtcMultiaddr = `/p2p/${peerId}/webrtc`;
+      console.log("Sharing WebRTC multiaddr:", webrtcMultiaddr);
+      sendWebRTCAddrToPeer(peerId, webrtcMultiaddr);
     } else {
       console.warn("WebRTC connection not confirmed, keeping relay active.");
     }
@@ -301,7 +309,7 @@ async function switchToWebRTC(peerMultiaddr) {
 async function dialPeer(peerAddr) {
   try {
     console.log(`Dialing peer: ${peerAddr}`);
-    const ma = multiaddr(peerAddr);
+    ma = multiaddr(peerAddr);
     const signal = AbortSignal.timeout(5000);
 
     let chatStream = null;
@@ -338,6 +346,51 @@ async function dialPeer(peerAddr) {
         console.error("Timed out opening chat stream");
       } else {
         console.error(`Opening chat stream failed - ${err.message}`);
+      }
+      return { error: err.message };
+    }
+  } catch (error) {
+    console.error("Failed to dial peer:", error);
+    return { error: error.message };
+  }
+}
+
+async function sendMessage(message) {
+  try {
+    const signal = AbortSignal.timeout(5000);
+
+    let chatStream = null;
+    const formattedMessage = `Tamer: ${message}`; // fixed username for now
+
+    try {
+      const stream = await libp2pNode.dialProtocol(ma, CHAT_PROTOCOL, { signal });
+      chatStream = byteStream(stream);
+
+      // Handle incoming messages
+      (async () => {
+        try {
+          while (true) {
+            const buf = await chatStream.read();
+            if (!buf || buf.length === 0) {
+              // End of stream or empty message
+              break;
+            }
+            console.log(`Received message: '${toString(buf.subarray())}'`);
+          }
+        } catch (err) {
+          if (err.code !== "ERR_STREAM_PREMATURE_CLOSE") {
+            console.error("Error reading from stream:", err);
+          }
+        }
+      })();
+      
+      await chatStream.write(fromString(formattedMessage)); // Send formatted message
+    } catch (err) {
+      if (signal.aborted) {
+        console.error("Timed out opening chat stream");
+      } else {
+        console.error(`Opening chat stream failed - ${err.message}`);
+        console.log("also, ma: ", ma);
       }
       return { error: err.message };
     }

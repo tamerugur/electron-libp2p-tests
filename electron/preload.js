@@ -15,4 +15,6 @@ electron_1.contextBridge.exposeInMainWorld("electronAPI", {
   dialPeer: (node, peerMultiaddr) =>
     electron_1.ipcRenderer.invoke("dial-peer", node, peerMultiaddr),
   getPeers: () => electron_1.ipcRenderer.invoke("get-peers"),
+  sendMessage: (message) =>
+    electron_1.ipcRenderer.invoke("send-message", message),
 });
