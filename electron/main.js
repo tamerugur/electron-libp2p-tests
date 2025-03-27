@@ -13,7 +13,8 @@ import ngrok from "ngrok";
 import { multiaddr, protocols } from "@multiformats/multiaddr";
 import { ping } from "@libp2p/ping";
 import { byteStream } from "it-byte-stream";
-import { fromString } from "uint8arrays";
+import { fromString, toString } from "uint8arrays";
+import { pipe } from "it-pipe";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -170,29 +171,11 @@ async function createNode(relayAddr) {
   }
 
   libp2pNode.handle(CHAT_PROTOCOL, async ({ stream }) => {
-    console.log("Received incoming stream");
+    const chatStream = byteStream(stream);
 
-    // Use byteStream for both reading and writing
-    const bs = byteStream(stream);
-
-    try {
-      // Write using byteStream's .write() instead of raw sink
-      await bs.write(fromString("Hello World (incoming)"));
-      await bs.close();
-      console.log("Response sent successfully");
-    } catch (err) {
-      console.error("Failed to send:", err);
-    }
-
-    try {
-      // Read responses
-      while (true) {
-        const buf = await bs.read();
-        if (!buf || buf.length === 0) break;
-        console.log("Received:", fromString(buf));
-      }
-    } catch (err) {
-      console.error("Read error:", err);
+    while (true) {
+      const buf = await chatStream.read();
+      console.log(`Received message '${toString(buf.subarray())}'`);
     }
   });
 
@@ -315,26 +298,51 @@ async function switchToWebRTC(peerMultiaddr) {
   }
 }
 
-async function dialPeer(peerMultiaddr) {
+async function dialPeer(peerAddr) {
   try {
-    const peerAddr = multiaddr(peerMultiaddr);
-    await libp2pNode.dial(peerAddr);
+    console.log(`Dialing peer: ${peerAddr}`);
+    const ma = multiaddr(peerAddr);
+    const signal = AbortSignal.timeout(5000);
 
-    // Open stream and send data
-    const stream = await libp2pNode.dialProtocol(peerAddr, CHAT_PROTOCOL);
-    const bs = byteStream(stream);
+    let chatStream = null;
 
-    // Write data and close the write side
-    await bs.write(fromString("Hello World (outgoing)"));
-    await bs.close(); // Signal end of writing
+    try {
+      const stream = await libp2pNode.dialProtocol(ma, CHAT_PROTOCOL, {
+        signal,
+      });
+      chatStream = byteStream(stream);
 
-    // Read the entire response
-    const buf = await bs.read();
-    console.log("Received response:", fromString(buf));
+      // Handle incoming messages
+      (async () => {
+        try {
+          while (true) {
+            const buf = await chatStream.read();
+            if (!buf || buf.length === 0) {
+              // End of stream or empty message
+              break;
+            }
+            console.log(`Received message: '${toString(buf.subarray())}'`);
+          }
+        } catch (err) {
+          if (err.code !== "ERR_STREAM_PREMATURE_CLOSE") {
+            console.error("Error reading from stream:", err);
+          }
+        }
+      })();
 
-    return { success: true };
-  } catch (err) {
-    console.error("Dial error:", err);
-    return { error: err.message };
+      // Send "Hello World" message
+      const message = "Hello World";
+      await chatStream.write(fromString(message));
+    } catch (err) {
+      if (signal.aborted) {
+        console.error("Timed out opening chat stream");
+      } else {
+        console.error(`Opening chat stream failed - ${err.message}`);
+      }
+      return { error: err.message };
+    }
+  } catch (error) {
+    console.error("Failed to dial peer:", error);
+    return { error: error.message };
   }
 }
