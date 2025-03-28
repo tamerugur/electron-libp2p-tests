@@ -20,7 +20,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const CHAT_PROTOCOL = "/libp2p/examples/chat/1.0.0";
-const signal = AbortSignal.timeout(5000);
+const signal = AbortSignal.timeout(50000);
 let chatStream;
 let ma;
 let libp2pNode = null;
@@ -310,7 +310,7 @@ async function dialPeer(peerAddr) {
   try {
     console.log(`Dialing peer: ${peerAddr}`);
     ma = multiaddr(peerAddr);
-    const signal = AbortSignal.timeout(5000);
+    const signal = AbortSignal.timeout(50000);
 
     let chatStream = null;
 
@@ -343,8 +343,9 @@ async function dialPeer(peerAddr) {
       await chatStream.write(fromString(message));
     } catch (err) {
       if (signal.aborted) {
-        console.error("Timed out opening chat stream");
-      } else {
+        console.error("Request was aborted:", signal.reason || "Unknown reason");
+      }
+      else {
         console.error(`Opening chat stream failed - ${err.message}`);
       }
       return { error: err.message };
@@ -357,7 +358,7 @@ async function dialPeer(peerAddr) {
 
 async function sendMessage(message) {
   try {
-    const signal = AbortSignal.timeout(5000);
+    const signal = AbortSignal.timeout(50000);
 
     let chatStream = null;
     const formattedMessage = `Tamer: ${message}`; // fixed username for now
@@ -387,8 +388,9 @@ async function sendMessage(message) {
       await chatStream.write(fromString(formattedMessage)); // Send formatted message
     } catch (err) {
       if (signal.aborted) {
-        console.error("Timed out opening chat stream");
-      } else {
+        console.error("Request was aborted:", signal.reason || "Unknown reason");
+      }
+      else {
         console.error(`Opening chat stream failed - ${err.message}`);
         console.log("also, ma: ", ma);
       }
