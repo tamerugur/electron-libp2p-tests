@@ -315,9 +315,8 @@ async function dialPeer(peerAddr) {
     let chatStream = null;
 
     try {
-      const stream = await libp2pNode.dialProtocol(ma, CHAT_PROTOCOL, {
-        signal,
-      });
+      // Dial the peer with the specified multiaddr and protocol
+      const stream = await libp2pNode.dialProtocol(ma, CHAT_PROTOCOL, { signal });
       chatStream = byteStream(stream);
 
       // Handle incoming messages
@@ -330,6 +329,14 @@ async function dialPeer(peerAddr) {
               break;
             }
             console.log(`Received message: '${toString(buf.subarray())}'`);
+
+            // Check if the message is a multiaddr update
+            const receivedMa = toString(buf.subarray());
+            if (receivedMa.startsWith("/p2p/")) {
+              console.log("Received multiaddr update:", receivedMa);
+              ma = multiaddr(receivedMa);  // Update the `ma` variable with the new multiaddr
+              console.log("Updated multiaddr:", ma.toString());
+            }
           }
         } catch (err) {
           if (err.code !== "ERR_STREAM_PREMATURE_CLOSE") {
@@ -338,14 +345,20 @@ async function dialPeer(peerAddr) {
         }
       })();
 
-      // Send "Hello World" message
-      const message = "Hello World";
-      await chatStream.write(fromString(message));
+      // Send the current peer's multiaddr to the other peer
+      const peerMultiaddr = libp2pNode.getMultiaddrs().find((addr) => addr.toString().includes("/p2p/"));
+      if (peerMultiaddr) {
+        const peerMaString = peerMultiaddr.toString();
+        console.log("Sending my multiaddr to the peer:", peerMaString);
+        await chatStream.write(fromString(peerMaString));  // Send the peer's own multiaddr
+      } else {
+        console.error("No valid multiaddr found for this peer.");
+      }
+
     } catch (err) {
       if (signal.aborted) {
         console.error("Request was aborted:", signal.reason || "Unknown reason");
-      }
-      else {
+      } else {
         console.error(`Opening chat stream failed - ${err.message}`);
       }
       return { error: err.message };
