@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const electron_1 = require("electron");
+
 electron_1.contextBridge.exposeInMainWorld("electronAPI", {
   versions: {
     node: () => process.versions.node,
@@ -17,4 +18,13 @@ electron_1.contextBridge.exposeInMainWorld("electronAPI", {
   getPeers: () => electron_1.ipcRenderer.invoke("get-peers"),
   sendMessage: (message) =>
     electron_1.ipcRenderer.invoke("send-message", message),
+
+  onMessageReceived: (callback) => {
+    electron_1.ipcRenderer.on("message-received", (event, message) =>
+      callback(message)
+    );
+  },
+  removeMessageListeners: () => {
+    electron_1.ipcRenderer.removeAllListeners("message-received");
+  },
 });

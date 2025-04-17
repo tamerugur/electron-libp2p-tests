@@ -14,7 +14,7 @@ function Server(props) {
     setLoading(true);
     try {
       const result = await window.electronAPI.startRelay();
-      setTunnelUrl(result.ngrokUrl);
+      setTunnelUrl(result.relayUrl);
       // Create node after relay is started
       // await window.electronAPI.createNode();
     } catch (error) {
@@ -156,9 +156,27 @@ function Server(props) {
           }}
         >
           <h1>Join a Server</h1>
-
-          <p>Server IP: </p>
-          <p>Server Port: </p>
+          <button
+            onClick={handleCreateNode}
+            style={{
+              backgroundColor: "#5865F2",
+              color: "white",
+              padding: "10px 20px",
+              border: "none",
+              borderRadius: "5px",
+              cursor: "pointer",
+              marginBottom: "20px",
+              marginLeft: "10px",
+              transition: "transform 0.1s",
+            }}
+            onMouseDown={(e) =>
+              (e.currentTarget.style.transform = "scale(0.95)")
+            }
+            onMouseUp={(e) => (e.currentTarget.style.transform = "scale(1)")}
+            onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
+          >
+            Create Node (No Relay)
+          </button>
         </div>
       ) : (
         <div
@@ -192,28 +210,6 @@ function Server(props) {
             onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
           >
             {loading ? "Starting Server..." : "Start the Server"}
-          </button>
-
-          <button
-            onClick={handleCreateNode}
-            style={{
-              backgroundColor: "#5865F2",
-              color: "white",
-              padding: "10px 20px",
-              border: "none",
-              borderRadius: "5px",
-              cursor: "pointer",
-              marginBottom: "20px",
-              marginLeft: "10px",
-              transition: "transform 0.1s",
-            }}
-            onMouseDown={(e) =>
-              (e.currentTarget.style.transform = "scale(0.95)")
-            }
-            onMouseUp={(e) => (e.currentTarget.style.transform = "scale(1)")}
-            onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
-          >
-            Create Node (No Relay)
           </button>
 
           {tunnelUrl && (
@@ -267,18 +263,16 @@ function Server(props) {
                 width: "100%",
               }}
             >
-
-                <li
-                  key={multiaddrs}
-                  style={{
-                    wordBreak: "break-word",
-                    whiteSpace: "pre-wrap",
-                    marginBottom: "10px",
-                  }}
-                >
-                  {multiaddrs}
-                </li>
-
+              <li
+                key={multiaddrs}
+                style={{
+                  wordBreak: "break-word",
+                  whiteSpace: "pre-wrap",
+                  marginBottom: "10px",
+                }}
+              >
+                {multiaddrs}
+              </li>
             </ul>
           ) : (
             !loading && <p>No server running.</p>

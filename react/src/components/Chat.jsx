@@ -1,9 +1,14 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import sendIcon from "../assets/sendIcon.svg";
 
 function Chat(props) {
   const [messageToSend, setMessageToSend] = useState("");
-
+  const [messages, setMessages] = useState([]);
+  useEffect(() => {
+    window.electronAPI.onMessageReceived((message) => {
+      setMessages((prev) => [...prev, message]);
+    });
+  }, []);
   const handleSendMessage = async () => {
     if (!messageToSend.trim()) return;
     try {

@@ -18,7 +18,7 @@ import { pipe } from "it-pipe";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
+let mainWindow;
 const CHAT_PROTOCOL = "/libp2p/examples/chat/1.0.0";
 const signal = AbortSignal.timeout(50000);
 let chatStream;
@@ -28,7 +28,7 @@ const WEBRTC_CODE = protocols("webrtc").code;
 
 function createWindow() {
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;
-  const mainWindow = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: Math.floor(width * 0.9),
     height: Math.floor(height * 0.9),
     webPreferences: {
@@ -115,23 +115,15 @@ async function startRelay() {
   });
 
   await server.start();
-  // const serverMultiaddrs = server.getMultiaddrs().map((ma) => ma.toString());
 
-  try {
-    const url = await ngrok.connect({ proto: "http", addr: 51357 });
-    const ngrokAddr =
-      url.replace("https://", "/dns4/").replace("http://", "/dns4/") +
-      "/tcp/443/wss";
+  const relayDomain = "/dns4/relay.sadhqwiodnjizux.space/tcp/443/wss";
 
-    return {
-      // multiaddrs: serverMultiaddrs,
-      ngrokUrl: ngrokAddr,
-    };
-  } catch (err) {
-    console.error("Error in relay setup:", err);
-    return { error: err.message };
-  }
+  console.log("Relay is running at:", relayDomain);
+  return {
+    relayUrl: relayDomain,
+  };
 }
+
 async function createNode(relayAddr) {
   let relayMultiaddr;
   console.log("Creating Libp2p node...");
@@ -179,7 +171,11 @@ async function createNode(relayAddr) {
 
     while (true) {
       const buf = await chatStream.read();
-      console.log(`Received message '${toString(buf.subarray())}'`);
+      const message = toString(buf.subarray());
+      console.log(`Received message '${message}'`);
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send("message-received", message);
+      }
     }
   });
 
@@ -316,7 +312,9 @@ async function dialPeer(peerAddr) {
 
     try {
       // Dial the peer with the specified multiaddr and protocol
-      const stream = await libp2pNode.dialProtocol(ma, CHAT_PROTOCOL, { signal });
+      const stream = await libp2pNode.dialProtocol(ma, CHAT_PROTOCOL, {
+        signal,
+      });
       chatStream = byteStream(stream);
 
       // Handle incoming messages
@@ -328,13 +326,17 @@ async function dialPeer(peerAddr) {
               // End of stream or empty message
               break;
             }
-            console.log(`Received message: '${toString(buf.subarray())}'`);
+            const message = toString(buf.subarray());
+            console.log(`Received message: '${message}'`);
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send("message-received", message);
+            }
 
             // Check if the message is a multiaddr update
             const receivedMa = toString(buf.subarray());
             if (receivedMa.startsWith("/p2p/")) {
               console.log("Received multiaddr update:", receivedMa);
-              ma = multiaddr(receivedMa);  // Update the `ma` variable with the new multiaddr
+              ma = multiaddr(receivedMa); // Update the `ma` variable with the new multiaddr
               console.log("Updated multiaddr:", ma.toString());
             }
           }
@@ -346,18 +348,22 @@ async function dialPeer(peerAddr) {
       })();
 
       // Send the current peer's multiaddr to the other peer
-      const peerMultiaddr = libp2pNode.getMultiaddrs().find((addr) => addr.toString().includes("/p2p/"));
+      const peerMultiaddr = libp2pNode
+        .getMultiaddrs()
+        .find((addr) => addr.toString().includes("/p2p/"));
       if (peerMultiaddr) {
         const peerMaString = peerMultiaddr.toString();
         console.log("Sending my multiaddr to the peer:", peerMaString);
-        await chatStream.write(fromString(peerMaString));  // Send the peer's own multiaddr
+        await chatStream.write(fromString(peerMaString)); // Send the peer's own multiaddr
       } else {
         console.error("No valid multiaddr found for this peer.");
       }
-
     } catch (err) {
       if (signal.aborted) {
-        console.error("Request was aborted:", signal.reason || "Unknown reason");
+        console.error(
+          "Request was aborted:",
+          signal.reason || "Unknown reason"
+        );
       } else {
         console.error(`Opening chat stream failed - ${err.message}`);
       }
@@ -377,7 +383,9 @@ async function sendMessage(message) {
     const formattedMessage = `Tamer: ${message}`; // fixed username for now
 
     try {
-      const stream = await libp2pNode.dialProtocol(ma, CHAT_PROTOCOL, { signal });
+      const stream = await libp2pNode.dialProtocol(ma, CHAT_PROTOCOL, {
+        signal,
+      });
       chatStream = byteStream(stream);
 
       // Handle incoming messages
@@ -389,7 +397,11 @@ async function sendMessage(message) {
               // End of stream or empty message
               break;
             }
-            console.log(`Received message: '${toString(buf.subarray())}'`);
+            const message = toString(buf.subarray());
+            console.log(`Received message: '${message}'`);
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send("message-received", message);
+            }
           }
         } catch (err) {
           if (err.code !== "ERR_STREAM_PREMATURE_CLOSE") {
@@ -397,13 +409,15 @@ async function sendMessage(message) {
           }
         }
       })();
-      
+
       await chatStream.write(fromString(formattedMessage)); // Send formatted message
     } catch (err) {
       if (signal.aborted) {
-        console.error("Request was aborted:", signal.reason || "Unknown reason");
-      }
-      else {
+        console.error(
+          "Request was aborted:",
+          signal.reason || "Unknown reason"
+        );
+      } else {
         console.error(`Opening chat stream failed - ${err.message}`);
         console.log("also, ma: ", ma);
       }
