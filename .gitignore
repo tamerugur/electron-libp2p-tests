@@ -28,6 +28,8 @@ compile_commands.json
 /npm/path.txt
 /npm/checksums.json
 
+test.html
+
 .npmrc
 
 # Generated API definitions
