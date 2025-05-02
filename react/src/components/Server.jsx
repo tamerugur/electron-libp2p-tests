@@ -10,6 +10,26 @@ function Server(props) {
   const [peers, setPeers] = useState([]);
   const [peerDialAddr, setPeerDialAddr] = useState("");
   const [dialMessage, setDialMessage] = useState("");
+  const [username, setUsername] = useState("");
+  
+  const handleSetUsername = async () => {
+    if (!username.trim()) {
+      setMessage("Please enter a valid username.");
+      return;
+    }
+    try {
+      const response = await window.electronAPI.setUsername(username);
+      if (response.success) {
+        setMessage(`Username set to: ${response.username}`);
+      } else {
+        setMessage("Failed to set username.");
+      }
+    } catch (error) {
+      console.error("Failed to set username:", error);
+      setMessage(`Failed to set username: ${error.message}`);
+    }
+  };
+
   const handleStartServer = async () => {
     setLoading(true);
     try {
@@ -250,7 +270,7 @@ function Server(props) {
                   Submit
                 </button>
               </form>
-              {message && <p>{message}</p>}
+              
             </div>
           )}
           <h2>Server Multiaddrs</h2>
@@ -277,38 +297,6 @@ function Server(props) {
           ) : (
             !loading && <p>No server running.</p>
           )}
-
-          <div style={{ width: "100%" }}>
-            <h2>Available Peers</h2>
-            <button style={{ backgroundColor: "#5865F2" }} onClick={getPeers}>
-              Get Peers
-            </button>
-            <ul
-              style={{
-                listStyle: "none",
-                padding: 0,
-                margin: 0,
-                width: "100%",
-              }}
-            >
-              {peers.length > 0 ? (
-                peers.map(([peerId, addr], index) => (
-                  <li
-                    key={index}
-                    style={{
-                      wordBreak: "break-word",
-                      whiteSpace: "pre-wrap",
-                      marginBottom: "10px",
-                    }}
-                  >
-                    <strong>{peerId}</strong>: {addr}
-                  </li>
-                ))
-              ) : (
-                <li>No peers found</li>
-              )}
-            </ul>
-          </div>
         </div>
       )}
 
@@ -322,7 +310,6 @@ function Server(props) {
           borderRadius: "10px",
         }}
       >
-        <h2>Dial a Peer</h2>
         <input
           type="text"
           value={peerDialAddr}
@@ -343,6 +330,43 @@ function Server(props) {
           Dial Peer
         </button>
         {dialMessage && <p>{dialMessage}</p>}
+
+        <input
+          type="text"
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+          placeholder="Enter Username"
+          style={{
+            padding: "10px",
+            width: "300px",
+            marginBottom: "10px",
+            fontSize: "16px",
+            outline: "none",
+            border: "1px solid #363940",
+            backgroundColor: "#363940",
+            color: "white",
+            marginTop: "40px",
+          }}
+        />
+        <button
+          onClick={handleSetUsername}
+          style={{
+            backgroundColor: "#5865F2",
+            color: "white",
+            padding: "10px 20px",
+            borderRadius: "5px",
+            cursor: "pointer",
+            transition: "transform 0.1s",
+          }}
+          onMouseDown={(e) =>
+            (e.currentTarget.style.transform = "scale(0.95)")
+          }
+          onMouseUp={(e) => (e.currentTarget.style.transform = "scale(1)")}
+          onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
+        >
+          Set Username
+        </button>
+        {message && <p>{message}</p>}
       </div>
     </div>
   );

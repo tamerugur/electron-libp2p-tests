@@ -21,7 +21,7 @@ const __dirname = path.dirname(__filename);
 let mainWindow;
 const CHAT_PROTOCOL = "/libp2p/examples/chat/1.0.0";
 const signal = AbortSignal.timeout(50000);
-let chatStream;
+let username;
 let ma;
 let libp2pNode = null;
 const WEBRTC_CODE = protocols("webrtc").code;
@@ -75,6 +75,11 @@ app.whenReady().then(() => {
   });
   ipcMain.handle("send-message", async (_, message) => {
     return await sendMessage(message);
+  });
+  ipcMain.handle("set-username", (_, _username) => {
+    username = _username || "Anonymous";
+    console.log("Username set to:", username);
+    return { success: true, username };
   });
 });
 
@@ -154,9 +159,7 @@ async function createNode(relayAddr) {
 
   function updateConnList() {
     libp2pNode.getConnections().forEach((connection) => {
-      // Check if the connection has the WebRTC protocol
       if (connection.remoteAddr.protoCodes().includes(WEBRTC_CODE)) {
-        // 0x0014 is WebRTC's protocol code
         ma = connection.remoteAddr;
         console.log("WebRTC connection:", ma.toString());
         console.log("plain ma ", ma);
@@ -168,13 +171,24 @@ async function createNode(relayAddr) {
 
   libp2pNode.handle(CHAT_PROTOCOL, async ({ stream }) => {
     const chatStream = byteStream(stream);
-
+  
     while (true) {
       const buf = await chatStream.read();
-      const message = toString(buf.subarray());
-      console.log(`Received message '${message}'`);
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send("message-received", message);
+      const rawMessage = toString(buf.subarray());
+      
+      try {
+        const parsed = JSON.parse(rawMessage);
+        console.log(`[${parsed.time}] ${parsed.username}: ${parsed.message}`);
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send("message-received", {
+            username: parsed.username,
+            time: parsed.time,
+            message: parsed.message,
+            isCurrentUser: parsed.username === username
+          });
+        }
+      } catch (err) {
+        console.error("Failed to parse message:", rawMessage, err);
       }
     }
   });
@@ -192,7 +206,6 @@ async function createNode(relayAddr) {
       console.log(`Dialing relay: ${relayAddr}`);
       await libp2pNode.dial(multiaddr(relayAddr));
       console.log("Connected to relay!");
-      console.log("Waiting for relay registration...");
       await new Promise((resolve) => setTimeout(resolve, 1000));
 
       console.log("Your node's multiaddrs:");
@@ -205,7 +218,6 @@ async function createNode(relayAddr) {
           relayMultiaddr = addr;
         }
       });
-      // libp2pNode.getMultiaddrs().forEach((ma) => console.log(ma.toString()));
     } catch (err) {
       console.error("Failed to connect to relay:", err);
     }
@@ -230,40 +242,22 @@ async function switchToWebRTC(peerMultiaddr) {
     const peerId = ma.getPeerId();
     console.log("Extracted Peer ID:", peerId);
 
-    // Get all peers from the peer store
     const peers = Array.from(await libp2pNode.peerStore.all());
-    console.log(
-      "Known peers:",
-      peers.map((peer) => peer.id.toString())
-    );
-
-    // Find the peer info
     const peerInfo = peers.find((peer) => peer.id.toString() === peerId);
 
     if (!peerInfo) {
       console.log(`Peer ${peerId} not found in store, attempting to dial...`);
       await libp2pNode.dial(ma);
-      await new Promise((resolve) => setTimeout(resolve, 2000)); // Wait for connection
+      await new Promise((resolve) => setTimeout(resolve, 2000));
     }
 
-    // Check if WebRTC is supported
     const connections = libp2pNode.getConnections(peerId);
-    console.log("Current connections:", connections);
-
     if (!connections || connections.length === 0) {
       throw new Error("No connections found for peer");
     }
 
     const hasWebRTC = connections.some((conn) => {
       if (!conn || !conn.remotePeer) return false;
-
-      // Safely check for WebRTC streams
-      console.log("Checking connection:");
-      // console.log("ID:", conn.id);
-      // console.log("Remote Address:", conn.remoteAddr.toString());
-      // console.log("Remote Peer:", conn.remotePeer.toString());
-      // console.log("Status:", conn.status);
-      // console.log("RTT:", conn.rtt);
       const streams = conn.streams || [];
       return streams.some((stream) => {
         return (
@@ -277,8 +271,6 @@ async function switchToWebRTC(peerMultiaddr) {
 
     if (hasWebRTC) {
       console.log("WebRTC connection established!");
-
-      // Close relay connections
       const relayConnections = connections.filter(
         (conn) =>
           conn.remoteAddr && conn.remoteAddr.toString().includes("/p2p-circuit")
@@ -289,7 +281,6 @@ async function switchToWebRTC(peerMultiaddr) {
       }
 
       console.log("Relay connections closed, WebRTC active!");
-
       const webrtcMultiaddr = `/p2p/${peerId}/webrtc`;
       console.log("Sharing WebRTC multiaddr:", webrtcMultiaddr);
       sendWebRTCAddrToPeer(peerId, webrtcMultiaddr);
@@ -308,62 +299,24 @@ async function dialPeer(peerAddr) {
     ma = multiaddr(peerAddr);
     const signal = AbortSignal.timeout(50000);
 
-    let chatStream = null;
-
     try {
-      // Dial the peer with the specified multiaddr and protocol
       const stream = await libp2pNode.dialProtocol(ma, CHAT_PROTOCOL, {
         signal,
       });
-      chatStream = byteStream(stream);
+      const chatStream = byteStream(stream);
 
-      // Handle incoming messages
-      (async () => {
-        try {
-          while (true) {
-            const buf = await chatStream.read();
-            if (!buf || buf.length === 0) {
-              // End of stream or empty message
-              break;
-            }
-            const message = toString(buf.subarray());
-            console.log(`Received message: '${message}'`);
-            if (mainWindow && !mainWindow.isDestroyed()) {
-              mainWindow.webContents.send("message-received", message);
-            }
-
-            // Check if the message is a multiaddr update
-            const receivedMa = toString(buf.subarray());
-            if (receivedMa.startsWith("/p2p/")) {
-              console.log("Received multiaddr update:", receivedMa);
-              ma = multiaddr(receivedMa); // Update the `ma` variable with the new multiaddr
-              console.log("Updated multiaddr:", ma.toString());
-            }
-          }
-        } catch (err) {
-          if (err.code !== "ERR_STREAM_PREMATURE_CLOSE") {
-            console.error("Error reading from stream:", err);
-          }
-        }
-      })();
-
-      // Send the current peer's multiaddr to the other peer
+      // Only send our multiaddr without setting up a reader
       const peerMultiaddr = libp2pNode
         .getMultiaddrs()
         .find((addr) => addr.toString().includes("/p2p/"));
       if (peerMultiaddr) {
         const peerMaString = peerMultiaddr.toString();
         console.log("Sending my multiaddr to the peer:", peerMaString);
-        await chatStream.write(fromString(peerMaString)); // Send the peer's own multiaddr
-      } else {
-        console.error("No valid multiaddr found for this peer.");
+        await chatStream.write(fromString(peerMaString));
       }
     } catch (err) {
       if (signal.aborted) {
-        console.error(
-          "Request was aborted:",
-          signal.reason || "Unknown reason"
-        );
+        console.error("Request was aborted:", signal.reason || "Unknown reason");
       } else {
         console.error(`Opening chat stream failed - ${err.message}`);
       }
@@ -377,54 +330,40 @@ async function dialPeer(peerAddr) {
 
 async function sendMessage(message) {
   try {
-    const signal = AbortSignal.timeout(50000);
+    const currentTime = new Date().toLocaleTimeString();
+    const formattedMessage = JSON.stringify({
+      username: username || "Anonymous",
+      time: currentTime,
+      message: message
+    });
 
-    let chatStream = null;
-    const formattedMessage = `Tamer: ${message}`; // fixed username for now
-
-    try {
-      const stream = await libp2pNode.dialProtocol(ma, CHAT_PROTOCOL, {
-        signal,
+    // Immediately show sent message in UI
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("message-received", {
+        username: username || "Anonymous",
+        time: currentTime,
+        message: message,
+        isCurrentUser: true
       });
-      chatStream = byteStream(stream);
-
-      // Handle incoming messages
-      (async () => {
-        try {
-          while (true) {
-            const buf = await chatStream.read();
-            if (!buf || buf.length === 0) {
-              // End of stream or empty message
-              break;
-            }
-            const message = toString(buf.subarray());
-            console.log(`Received message: '${message}'`);
-            if (mainWindow && !mainWindow.isDestroyed()) {
-              mainWindow.webContents.send("message-received", message);
-            }
-          }
-        } catch (err) {
-          if (err.code !== "ERR_STREAM_PREMATURE_CLOSE") {
-            console.error("Error reading from stream:", err);
-          }
-        }
-      })();
-
-      await chatStream.write(fromString(formattedMessage)); // Send formatted message
-    } catch (err) {
-      if (signal.aborted) {
-        console.error(
-          "Request was aborted:",
-          signal.reason || "Unknown reason"
-        );
-      } else {
-        console.error(`Opening chat stream failed - ${err.message}`);
-        console.log("also, ma: ", ma);
-      }
-      return { error: err.message };
     }
+
+    // Send message over the network
+    const stream = await libp2pNode.dialProtocol(ma, CHAT_PROTOCOL, {
+      signal: AbortSignal.timeout(50000),
+    });
+    const chatStream = byteStream(stream);
+    
+    await chatStream.write(fromString(formattedMessage));
+
+    return { success: true };
   } catch (error) {
-    console.error("Failed to dial peer:", error);
-    return { error: error.message };
+    console.error("Failed to send message:", error);
+    return { 
+      error: error.message,
+      details: {
+        multiaddr: ma?.toString(),
+        timestamp: new Date().toISOString()
+      }
+    };
   }
 }

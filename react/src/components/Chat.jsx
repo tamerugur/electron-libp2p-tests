@@ -1,22 +1,38 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import sendIcon from "../assets/sendIcon.svg";
 
 function Chat(props) {
   const [messageToSend, setMessageToSend] = useState("");
   const [messages, setMessages] = useState([]);
+  const messagesEndRef = useRef(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
   useEffect(() => {
     window.electronAPI.onMessageReceived((message) => {
       setMessages((prev) => [...prev, message]);
     });
   }, []);
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
   const handleSendMessage = async () => {
     if (!messageToSend.trim()) return;
     try {
       await window.electronAPI.sendMessage(messageToSend);
-      console.log("Message sent:", messageToSend);
       setMessageToSend("");
     } catch (error) {
       console.error("Failed to send message:", error);
+    }
+  };
+
+  const handleKeyPress = (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      handleSendMessage();
     }
   };
 
@@ -36,8 +52,44 @@ function Chat(props) {
           width: "100%",
           margin: "0",
           overflow: "auto",
+          padding: "20px",
         }}
-      ></div>
+      >
+        {messages.map((msg, index) => (
+          <div
+            key={index}
+            style={{
+              marginBottom: "15px",
+              color: "#fff",
+              alignSelf: msg.isCurrentUser ? "flex-end" : "flex-start",
+            }}
+          >
+            <div style={{ 
+              display: "flex", 
+              gap: "8px", 
+              alignItems: "baseline",
+              color: "#888"
+            }}>
+              <span style={{ fontWeight: "bold", color: "#4752C4" }}>{msg.username}</span>
+              <span style={{ fontSize: "0.8rem" }}>{msg.time}</span>
+            </div>
+            <div
+              style={{
+                background: msg.isCurrentUser ? "#4752C4" : "#41444a",
+                padding: "10px 15px",
+                borderRadius: "15px",
+                maxWidth: "80%",
+                wordBreak: "break-word",
+                marginLeft: msg.isCurrentUser ? "auto" : "0",
+              }}
+            >
+              {msg.message}
+            </div>
+          </div>
+        ))}
+        <div ref={messagesEndRef} />
+      </div>
+      
       <div
         style={{
           display: "flex",
@@ -51,6 +103,7 @@ function Chat(props) {
           type="text"
           value={messageToSend}
           onChange={(e) => setMessageToSend(e.target.value)}
+          onKeyPress={handleKeyPress}
           style={{
             width: `${props.chatWidth}`,
             padding: "12px",
@@ -63,6 +116,7 @@ function Chat(props) {
             backgroundColor: "#41444a",
             fontFamily: "Inter, sans-serif",
             fontWeight: "bold",
+            color: "#fff",
           }}
           placeholder="Type your message..."
         />

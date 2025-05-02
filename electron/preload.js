@@ -18,7 +18,8 @@ electron_1.contextBridge.exposeInMainWorld("electronAPI", {
   getPeers: () => electron_1.ipcRenderer.invoke("get-peers"),
   sendMessage: (message) =>
     electron_1.ipcRenderer.invoke("send-message", message),
-
+  setUsername: (username) => 
+    electron_1.ipcRenderer.invoke("set-username", username),
   onMessageReceived: (callback) => {
     electron_1.ipcRenderer.on("message-received", (event, message) =>
       callback(message)
