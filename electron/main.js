@@ -333,7 +333,11 @@ async function dialPeer(peerAddr) {
 
 async function sendMessage(message) {
   try {
-    const currentTime = new Date().toLocaleTimeString();
+    const currentTime = new Date().toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    });
     const formattedMessage = JSON.stringify({
       username: username || "Anonymous",
       time: currentTime,

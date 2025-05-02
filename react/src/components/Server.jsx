@@ -11,7 +11,7 @@ function Server(props) {
   const [peerDialAddr, setPeerDialAddr] = useState("");
   const [dialMessage, setDialMessage] = useState("");
   const [username, setUsername] = useState("");
-  
+
   const handleSetUsername = async () => {
     if (!username.trim()) {
       setMessage("Please enter a valid username.");
@@ -33,12 +33,18 @@ function Server(props) {
   const handleStartServer = async () => {
     setLoading(true);
     try {
+      // Step 1: Start relay and get tunnel URL
       const result = await window.electronAPI.startRelay();
       setTunnelUrl(result.relayUrl);
-      // Create node after relay is started
-      // await window.electronAPI.createNode();
+
+      // Step 2: Automatically create node using the tunnel URL
+      const response = await window.electronAPI.createNode(result.relayUrl);
+      setMultiaddrs(response.relayMultiaddr);
+
+      setMessage("Server started and node created successfully!");
     } catch (error) {
-      console.error("Failed to start relay:", error);
+      console.error("Failed to start server:", error);
+      setMessage(`Failed to start server: ${error.message}`);
     }
     setLoading(false);
   };
@@ -176,27 +182,62 @@ function Server(props) {
           }}
         >
           <h1>Join a Server</h1>
-          <button
-            onClick={handleCreateNode}
+          <div
             style={{
-              backgroundColor: "#5865F2",
-              color: "white",
-              padding: "10px 20px",
-              border: "none",
-              borderRadius: "5px",
-              cursor: "pointer",
-              marginBottom: "20px",
-              marginLeft: "10px",
-              transition: "transform 0.1s",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
             }}
-            onMouseDown={(e) =>
-              (e.currentTarget.style.transform = "scale(0.95)")
-            }
-            onMouseUp={(e) => (e.currentTarget.style.transform = "scale(1)")}
-            onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
           >
-            Create Node (No Relay)
-          </button>
+            <button
+              onClick={handleCreateNode}
+              style={{
+                backgroundColor: "#5865F2",
+                color: "white",
+                padding: "10px 20px",
+                border: "none",
+                borderRadius: "5px",
+                cursor: "pointer",
+                marginBottom: "20px",
+                transition: "transform 0.1s",
+              }}
+              onMouseDown={(e) =>
+                (e.currentTarget.style.transform = "scale(0.95)")
+              }
+              onMouseUp={(e) => (e.currentTarget.style.transform = "scale(1)")}
+              onMouseLeave={(e) =>
+                (e.currentTarget.style.transform = "scale(1)")}
+            >
+              Create Node (No Relay)
+            </button>
+
+            <input
+              type="text"
+              value={peerDialAddr}
+              onChange={(e) => setPeerDialAddr(e.target.value)}
+              placeholder="Enter Peer Multiaddr"
+              style={{
+                padding: "10px",
+                width: "300px",
+                marginBottom: "10px",
+              }}
+            />
+            <button
+              onClick={handleDialPeer}
+              style={{
+                backgroundColor: "#5865F2",
+                color: "white",
+                padding: "10px 20px",
+                borderRadius: "5px",
+                cursor: "pointer",
+                width: "150px",
+                marginBottom: "10px",
+              }}
+            >
+              Dial Peer
+            </button>
+          </div>
+          {dialMessage && <p>{dialMessage}</p>}
         </div>
       ) : (
         <div
@@ -231,71 +272,23 @@ function Server(props) {
           >
             {loading ? "Starting Server..." : "Start the Server"}
           </button>
-
           {tunnelUrl && (
             <div>
-              <h2>Tunnel URL</h2>
-              <p style={{ wordBreak: "break-word" }}>{tunnelUrl}</p>
-              <h2>Enter Relay Address</h2>
-              <form
-                onSubmit={handleUrlSubmit}
-                style={{ display: "flex", gap: "10px" }}
-              >
-                <input
-                  type="text"
-                  value={relayAddr}
-                  onChange={(e) => setRelayAddr(e.target.value)}
-                  placeholder="Enter Relay URL"
-                  style={{
-                    width: "300px",
-                    padding: "10px",
-                    fontSize: "16px",
-                    outline: "none",
-                    border: "1px solid #363940",
-                    backgroundColor: "#363940",
-                    color: "white",
-                  }}
-                />
-                <button
-                  type="submit"
-                  style={{
-                    backgroundColor: "#5865F2",
-                    color: "white",
-                    padding: "10px 20px",
-                    border: "none",
-                    borderRadius: "5px",
-                    cursor: "pointer",
-                  }}
+              <h2>Server Information</h2>
+              <p style={{ wordBreak: "break-word", marginBottom: "20px" }}>
+                Relay URL: {tunnelUrl}
+              </p>
+              <h2>Node Multiaddress</h2>
+              {multiaddrs ? (
+                <div
+                  style={{ wordBreak: "break-word", whiteSpace: "pre-wrap" }}
                 >
-                  Submit
-                </button>
-              </form>
-              
+                  {multiaddrs}
+                </div>
+              ) : (
+                <p>Generating node address...</p>
+              )}
             </div>
-          )}
-          <h2>Server Multiaddrs</h2>
-          {multiaddrs ? (
-            <ul
-              style={{
-                listStyle: "none",
-                padding: 0,
-                margin: 0,
-                width: "100%",
-              }}
-            >
-              <li
-                key={multiaddrs}
-                style={{
-                  wordBreak: "break-word",
-                  whiteSpace: "pre-wrap",
-                  marginBottom: "10px",
-                }}
-              >
-                {multiaddrs}
-              </li>
-            </ul>
-          ) : (
-            !loading && <p>No server running.</p>
           )}
         </div>
       )}
@@ -310,27 +303,6 @@ function Server(props) {
           borderRadius: "10px",
         }}
       >
-        <input
-          type="text"
-          value={peerDialAddr}
-          onChange={(e) => setPeerDialAddr(e.target.value)}
-          placeholder="Enter Peer Multiaddr"
-          style={{ padding: "10px", width: "300px", marginBottom: "10px" }}
-        />
-        <button
-          onClick={handleDialPeer}
-          style={{
-            backgroundColor: "#5865F2",
-            color: "white",
-            padding: "10px 20px",
-            borderRadius: "5px",
-            cursor: "pointer",
-          }}
-        >
-          Dial Peer
-        </button>
-        {dialMessage && <p>{dialMessage}</p>}
-
         <input
           type="text"
           value={username}
@@ -358,9 +330,7 @@ function Server(props) {
             cursor: "pointer",
             transition: "transform 0.1s",
           }}
-          onMouseDown={(e) =>
-            (e.currentTarget.style.transform = "scale(0.95)")
-          }
+          onMouseDown={(e) => (e.currentTarget.style.transform = "scale(0.95)")}
           onMouseUp={(e) => (e.currentTarget.style.transform = "scale(1)")}
           onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
         >
