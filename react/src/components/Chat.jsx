@@ -11,9 +11,15 @@ function Chat(props) {
   };
 
   useEffect(() => {
-    window.electronAPI.onMessageReceived((message) => {
+    const handleMessageReceived = (message) => {
       setMessages((prev) => [...prev, message]);
-    });
+    };
+
+    window.electronAPI.onMessageReceived(handleMessageReceived);
+
+    return () => {
+      window.electronAPI.removeMessageListeners();
+    };
   }, []);
 
   useEffect(() => {
@@ -64,13 +70,17 @@ function Chat(props) {
               alignSelf: msg.isCurrentUser ? "flex-end" : "flex-start",
             }}
           >
-            <div style={{ 
-              display: "flex", 
-              gap: "8px", 
-              alignItems: "baseline",
-              color: "#888"
-            }}>
-              <span style={{ fontWeight: "bold", color: "#4752C4" }}>{msg.username}</span>
+            <div
+              style={{
+                display: "flex",
+                gap: "8px",
+                alignItems: "baseline",
+                color: "#888",
+              }}
+            >
+              <span style={{ fontWeight: "bold", color: "#4752C4" }}>
+                {msg.username}
+              </span>
               <span style={{ fontSize: "0.8rem" }}>{msg.time}</span>
             </div>
             <div
@@ -80,7 +90,8 @@ function Chat(props) {
                 borderRadius: "15px",
                 maxWidth: "80%",
                 wordBreak: "break-word",
-                marginLeft: msg.isCurrentUser ? "auto" : "0",
+                width: "fit-content",
+                marginRight: msg.isCurrentUser ? "0" : "auto",
               }}
             >
               {msg.message}
@@ -89,7 +100,7 @@ function Chat(props) {
         ))}
         <div ref={messagesEndRef} />
       </div>
-      
+
       <div
         style={{
           display: "flex",

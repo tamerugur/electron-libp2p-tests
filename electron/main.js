@@ -171,11 +171,11 @@ async function createNode(relayAddr) {
 
   libp2pNode.handle(CHAT_PROTOCOL, async ({ stream }) => {
     const chatStream = byteStream(stream);
-  
+
     while (true) {
       const buf = await chatStream.read();
       const rawMessage = toString(buf.subarray());
-      
+
       try {
         const parsed = JSON.parse(rawMessage);
         console.log(`[${parsed.time}] ${parsed.username}: ${parsed.message}`);
@@ -184,7 +184,7 @@ async function createNode(relayAddr) {
             username: parsed.username,
             time: parsed.time,
             message: parsed.message,
-            isCurrentUser: parsed.username === username
+            isCurrentUser: parsed.username === username,
           });
         }
       } catch (err) {
@@ -316,7 +316,10 @@ async function dialPeer(peerAddr) {
       }
     } catch (err) {
       if (signal.aborted) {
-        console.error("Request was aborted:", signal.reason || "Unknown reason");
+        console.error(
+          "Request was aborted:",
+          signal.reason || "Unknown reason"
+        );
       } else {
         console.error(`Opening chat stream failed - ${err.message}`);
       }
@@ -334,7 +337,7 @@ async function sendMessage(message) {
     const formattedMessage = JSON.stringify({
       username: username || "Anonymous",
       time: currentTime,
-      message: message
+      message: message,
     });
 
     // Immediately show sent message in UI
@@ -343,7 +346,7 @@ async function sendMessage(message) {
         username: username || "Anonymous",
         time: currentTime,
         message: message,
-        isCurrentUser: true
+        isCurrentUser: true,
       });
     }
 
@@ -352,18 +355,18 @@ async function sendMessage(message) {
       signal: AbortSignal.timeout(50000),
     });
     const chatStream = byteStream(stream);
-    
+
     await chatStream.write(fromString(formattedMessage));
 
     return { success: true };
   } catch (error) {
     console.error("Failed to send message:", error);
-    return { 
+    return {
       error: error.message,
       details: {
         multiaddr: ma?.toString(),
-        timestamp: new Date().toISOString()
-      }
+        timestamp: new Date().toISOString(),
+      },
     };
   }
 }
