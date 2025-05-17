@@ -9,18 +9,15 @@ import { webSockets } from "@libp2p/websockets";
 import { createLibp2p } from "libp2p";
 import { webRTC } from "@libp2p/webrtc";
 import { circuitRelayTransport } from "@libp2p/circuit-relay-v2";
-import ngrok from "ngrok";
 import { multiaddr, protocols } from "@multiformats/multiaddr";
 import { ping } from "@libp2p/ping";
 import { byteStream } from "it-byte-stream";
 import { fromString, toString } from "uint8arrays";
-import { pipe } from "it-pipe";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 let mainWindow;
 const CHAT_PROTOCOL = "/libp2p/examples/chat/1.0.0";
-const signal = AbortSignal.timeout(50000);
 let username;
 let ma;
 let libp2pNode = null;
