@@ -52,25 +52,15 @@ function Server(props) {
   const handleUrlSubmit = async (event) => {
     event.preventDefault();
 
-    // Check if relayAddr is empty or just whitespace
     if (!relayAddr || relayAddr.trim() === "") {
       setMessage("Please enter a relay address");
       return;
     }
 
-    console.log("Submitting relayAddr:", relayAddr);
-
     try {
-      console.log("Creating node with relayAddr:", relayAddr);
       const response = await window.electronAPI.createNode(relayAddr);
       setMultiaddrs(response.relayMultiaddr);
-      console.log("Node created:", response);
-      console.log(response.relayMultiaddr);
-      if (response.error) {
-        setMessage(`Failed to create node: ${response.error}`);
-      } else {
-        setMessage("Node created successfully!");
-      }
+      setMessage("Node created successfully!");
     } catch (error) {
       console.error("Failed to create node:", error);
       setMessage(`Failed to create node: ${error.message}`);
@@ -84,7 +74,14 @@ function Server(props) {
     }
     setDialMessage("Dialing peer...");
     try {
+      // Automatically create node if none exists
+      if (multiaddrs.length === 0) {
+        setDialMessage("Creating node...");
+        const response = await window.electronAPI.createNode();
+        setMultiaddrs(response.relayMultiaddr);
+      }
       await window.electronAPI.dialPeer(peerDialAddr);
+      setDialMessage("Successfully dialed peer!");
     } catch (error) {
       console.error("Failed to dial peer:", error);
       setDialMessage(`Failed to dial peer: ${error.message}`);
@@ -94,23 +91,11 @@ function Server(props) {
   async function getPeers() {
     try {
       const peersList = await window.electronAPI.getPeers();
-      console.log("Available peers:", peersList);
       setPeers(peersList);
     } catch (error) {
       console.error("Failed to get peers:", error);
     }
   }
-
-  const handleCreateNode = async () => {
-    try {
-      const addrs = await window.electronAPI.createNode();
-      console.log("Node created:", addrs);
-      setMessage("Node created successfully without relay!");
-    } catch (error) {
-      console.error("Failed to create node:", error);
-      setMessage(`Failed to create node: ${error.message}`);
-    }
-  };
 
   return (
     <div
@@ -127,6 +112,7 @@ function Server(props) {
         overflow: "auto",
       }}
     >
+      {/* Toggle switch remains unchanged */}
       <div
         style={{
           display: "flex",
@@ -189,28 +175,6 @@ function Server(props) {
               alignItems: "center",
             }}
           >
-            <button
-              onClick={handleCreateNode}
-              style={{
-                backgroundColor: "#5865F2",
-                color: "white",
-                padding: "10px 20px",
-                border: "none",
-                borderRadius: "5px",
-                cursor: "pointer",
-                marginBottom: "20px",
-                transition: "transform 0.1s",
-              }}
-              onMouseDown={(e) =>
-                (e.currentTarget.style.transform = "scale(0.95)")
-              }
-              onMouseUp={(e) => (e.currentTarget.style.transform = "scale(1)")}
-              onMouseLeave={(e) =>
-                (e.currentTarget.style.transform = "scale(1)")}
-            >
-              Create Node (No Relay)
-            </button>
-
             <input
               type="text"
               value={peerDialAddr}
@@ -240,6 +204,7 @@ function Server(props) {
           {dialMessage && <p>{dialMessage}</p>}
         </div>
       ) : (
+        // Server creation section remains unchanged
         <div
           style={{
             padding: "0 30px",
@@ -293,6 +258,7 @@ function Server(props) {
         </div>
       )}
 
+      {/* Username section remains unchanged */}
       <div
         style={{
           display: "flex",
