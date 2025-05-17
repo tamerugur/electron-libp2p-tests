@@ -244,7 +244,7 @@ function Server(props) {
                 Relay URL: {tunnelUrl}
               </p>
               <h2>Node Multiaddress</h2>
-              {multiaddrs ? (
+              {multiaddrs != '' ? (
                 <div
                   style={{ wordBreak: "break-word", whiteSpace: "pre-wrap" }}
                 >

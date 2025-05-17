@@ -29,7 +29,10 @@ function Chat(props) {
   const handleSendMessage = async () => {
     if (!messageToSend.trim()) return;
     try {
-      await window.electronAPI.sendMessage(messageToSend);
+      const result = await window.electronAPI.sendMessage(messageToSend);
+      if (result.error) {
+        console.error("Failed to send message:", result.error);
+      }
       setMessageToSend("");
     } catch (error) {
       console.error("Failed to send message:", error);
