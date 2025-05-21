@@ -13,6 +13,7 @@ import { multiaddr, protocols } from "@multiformats/multiaddr";
 import { ping } from "@libp2p/ping";
 import { byteStream } from "it-byte-stream";
 import { fromString, toString } from "uint8arrays";
+import { setupVoiceChatHandlers } from "./voiceChat.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -58,9 +59,39 @@ app.whenReady().then(() => {
       return { error: err.message };
     }
   });
+
+  ipcMain.handle("voice-chat-init", async (event) => {
+    try {
+      if (!libp2pNode) {
+        throw new Error('Libp2p node not initialized');
+      }
+      return await setupVoiceChatHandlers(libp2pNode, event);
+    } catch (err) {
+      console.error("Error initializing voice chat:", err);
+      return { error: err.message };
+    }
+  });
+
+  ipcMain.handle("get-connections", async () => {
+    try {
+      if (!libp2pNode) {
+        throw new Error('Libp2p node not initialized');
+      }
+      const connections = libp2pNode.getConnections();
+      return connections.map(conn => ({
+        peerId: conn.remotePeer.toString(),
+        type: conn.remoteAddr.protoCodes().includes(WEBRTC_CODE) ? 'webrtc' : 'relay'
+      }));
+    } catch (err) {
+      console.error("Error getting connections:", err);
+      return { error: err.message };
+    }
+  });
+
   ipcMain.handle("dial-peer", async (_, peerMultiaddr) => {
     return await dialPeer(peerMultiaddr);
   });
+  
   ipcMain.handle("switch-to-webrtc", async (_, peerMultiaddr) => {
     try {
       await switchToWebRTC(peerMultiaddr);
@@ -70,9 +101,11 @@ app.whenReady().then(() => {
       return { error: err.message };
     }
   });
+  
   ipcMain.handle("send-message", async (_, message) => {
     return await sendMessage(message);
   });
+  
   ipcMain.handle("set-username", (_, _username) => {
     username = _username || "Anonymous";
     console.log("Username set to:", username);
@@ -139,7 +172,33 @@ async function createNode(relayAddr) {
         "/ip4/0.0.0.0/tcp/0/ws",
       ],
     },
-    transports: [webSockets(), webRTC(), circuitRelayTransport()],
+    transports: [
+      webSockets(),
+      webRTC({
+        rtcConfiguration: {
+          iceServers: [
+            {
+              urls: "stun:global.stun.twilio.com:3478",
+            },
+            {
+              urls: [
+                "turn:global.turn.twilio.com:3478?transport=udp",
+                "turn:global.turn.twilio.com:3478?transport=tcp",
+              ],
+              username: "88a4fe9eeb4026d09b3f3d32affe583b71bc89ad73ede54acc24efc46e08d503",
+              credential: "5+a4RLeKZuTFw/B0q92TdCXhV3jCqUlDsCCaxDi3V7U="
+            },
+            {
+              urls: "turn:global.turn.twilio.com:443?transport=tcp",
+              username: "88a4fe9eeb4026d09b3f3d32affe583b71bc89ad73ede54acc24efc46e08d503",
+              credential: "5+a4RLeKZuTFw/B0q92TdCXhV3jCqUlDsCCaxDi3V7U="
+            }
+          ],
+          iceCandidatePoolSize: 10
+        }
+      }),
+      circuitRelayTransport()
+    ],
     connectionEncrypters: [noise()],
     streamMuxers: [yamux()],
     connectionGater: { denyDialMultiaddr: () => false },
@@ -228,37 +287,6 @@ async function createNode(relayAddr) {
   return { relayMultiaddr: relayMultiaddr };
 }
 
-// async function switchToWebRTC(peerMultiaddr) {
-//   try {
-//     const ma = multiaddr(peerMultiaddr);
-
-//     // Ensure it's a WebRTC multiaddr
-//     if (!ma.protoCodes().includes(WEBRTC_CODE)) {
-//       throw new Error("Not a WebRTC multiaddr");
-//     }
-
-//     // Directly dial using WebRTC transport
-//     const connection = await libp2pNode.dial(ma);
-
-//     console.log(
-//       "WebRTC connection established:",
-//       connection.remoteAddr.toString()
-//     );
-
-//     // Close relay connections
-//     const relayConnections = libp2pNode
-//       .getConnections()
-//       .filter((conn) => conn.remoteAddr.protoNames().includes("p2p-circuit"));
-
-//     await Promise.all(relayConnections.map((conn) => conn.close()));
-
-//     return { success: true };
-//   } catch (err) {
-//     console.error("WebRTC connection failed:", err);
-//     return { error: err.message };
-//   }
-// }
-
 async function dialPeer(peerAddr) {
   try {
     console.log(`Dialing peer: ${peerAddr}`);
@@ -305,48 +333,6 @@ async function dialPeer(peerAddr) {
   }
 }
 
-// async function sendMessage(message) {
-//   try {
-//     const currentTime = new Date().toLocaleTimeString([], {
-//       hour: "2-digit",
-//       minute: "2-digit",
-//       hour12: true,
-//     });
-//     const formattedMessage = JSON.stringify({
-//       username: username || "Anonymous",
-//       time: currentTime,
-//       message: message,
-//     });
-
-//     // Immediately show sent message in UI
-//     if (mainWindow && !mainWindow.isDestroyed()) {
-//       mainWindow.webContents.send("message-received", {
-//         username: username || "Anonymous",
-//         time: currentTime,
-//         message: message,
-//         isCurrentUser: true,
-//       });
-//     }
-
-//     // Send message over the network
-//     const stream = await libp2pNode.dialProtocol(ma, CHAT_PROTOCOL, {
-//       signal: AbortSignal.timeout(50000),
-//     });
-//     const chatStream = byteStream(stream);
-
-//     await chatStream.write(fromString(formattedMessage));
-
-//     return { success: true };
-//   } catch (error) {
-//     console.error("Failed to send message:", error);
-//     return {
-//       error: error.message,
-//       details: {
-//         multiaddr: ma?.toString(),
-//         timestamp: new Date().toISOString(),
-//       },
-//     };
-// }
 
 async function sendMessage(message) {
   try {
