@@ -63,6 +63,15 @@ export function setupVoiceChatHandlers(libp2pNode, event) {
         const data = await signalingStream.read();
         const signalingData = JSON.parse(toString(data.subarray()));
         console.log(`Received signaling data from ${peerId}:`, signalingData);
+
+        // Log WebRTC address if present in signaling data
+        if (signalingData.type === "webrtc-addr" || signalingData.webrtcAddr) {
+          console.log(
+            `Received WebRTC address from ${peerId}:`,
+            signalingData.webrtcAddr || signalingData.addr
+          );
+        }
+
         // Forward signaling data to renderer
         event.sender.send("signaling-data", signalingData, peerId);
       }
@@ -77,6 +86,14 @@ export function setupVoiceChatHandlers(libp2pNode, event) {
       // Create a new stream for signaling
       const stream = await libp2pNode.dialProtocol(peerId, SIGNALING_PROTOCOL);
       const signalingStream = byteStream(stream);
+
+      // Log WebRTC address if we're sending one
+      if (data.type === "webrtc-addr" || data.webrtcAddr) {
+        console.log(
+          `Sending WebRTC address to ${peerId}:`,
+          data.webrtcAddr || data.addr
+        );
+      }
 
       // Send the signaling data
       await signalingStream.write(fromString(JSON.stringify(data)));
