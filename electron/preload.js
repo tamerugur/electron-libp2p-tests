@@ -24,7 +24,7 @@ electron_1.contextBridge.exposeInMainWorld("electronAPI", {
   initVoiceChat: () => 
     electron_1.ipcRenderer.invoke("voice-chat-init"),
   dialVoiceChat: (peerId) => 
-    electron_1.ipcRenderer.invoke("voice-chat-dial", { peerId }),
+    electron_1.ipcRenderer.invoke("voice-chat-dial", { peerId }), 
   disconnectVoiceChat: (peerId) => 
     electron_1.ipcRenderer.invoke("voice-chat-disconnect", { peerId }),
   getConnections: () =>

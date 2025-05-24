@@ -287,6 +287,12 @@ function VoiceChat(props) {
       if (connections && connections.length > 0) {
         console.log("Setting up connections with existing peers:", connections);
         for (const connection of connections) {
+          if (connection.type != "webrtc") {
+            console.warn(
+              `Skipping connection with peer ${connection.peerId} as it is not a WebRTC connection`
+            );
+            continue;
+          }
           try {
             await window.electronAPI.dialVoiceChat(connection.peerId);
             await setupWebRTCConnection(connection.peerId);
