@@ -58,7 +58,6 @@ function VoiceChat(props) {
       return newPeers;
     });
 
-    // Clean up peer connection
     const peerConnection = peerConnectionsRef.current.get(peerId);
     if (peerConnection) {
       peerConnection.close();
@@ -66,6 +65,32 @@ function VoiceChat(props) {
     }
   };
 
+  const leaveVoiceChat = async () => {
+    if (!localStreamRef.current) return;
+
+    // Stop local stream
+    localStreamRef.current.getTracks().forEach((track) => track.stop());
+    localStreamRef.current = null;
+
+    // Close audio context
+    if (audioContextRef.current) {
+      audioContextRef.current.close();
+      audioContextRef.current = null;
+    }
+
+    // Disconnect all peers
+    for (const peerId of peerConnectionsRef.current.keys()) {
+      await window.electronAPI.disconnectVoiceChat(peerId);
+      peerConnectionsRef.current.get(peerId)?.close();
+      peerConnectionsRef.current.delete(peerId);
+    }
+
+    setPeers(new Set());
+    setIsConnected(false);
+    setConnectionStatus("");
+    setError(null);
+    console.log("Left voice chat.");
+  };
   const handleVoiceChatError = ({ error }) => {
     console.error("Voice chat error:", error);
     setError(error);
@@ -74,11 +99,12 @@ function VoiceChat(props) {
   const setupWebRTCConnection = async (peerId) => {
     try {
       console.log("Setting up WebRTC connection for peer:", peerId);
+
+      // Create a new RTCPeerConnection
       const peerConnection = new RTCPeerConnection({
         iceServers: [
-          {
-            urls: "stun:global.stun.twilio.com:3478",
-          },
+          { urls: "stun:stun.l.google.com:19302" },
+          { urls: "stun:global.stun.twilio.com:3478" },
           {
             urls: [
               "turn:global.turn.twilio.com:3478?transport=udp",
@@ -88,130 +114,95 @@ function VoiceChat(props) {
               "88a4fe9eeb4026d09b3f3d32affe583b71bc89ad73ede54acc24efc46e08d503",
             credential: "5+a4RLeKZuTFw/B0q92TdCXhV3jCqUlDsCCaxDi3V7U=",
           },
-          {
-            urls: "turn:global.turn.twilio.com:443?transport=tcp",
-            username:
-              "88a4fe9eeb4026d09b3f3d32affe583b71bc89ad73ede54acc24efc46e08d503",
-            credential: "5+a4RLeKZuTFw/B0q92TdCXhV3jCqUlDsCCaxDi3V7U=",
-          },
         ],
         iceCandidatePoolSize: 10,
       });
 
-      // Store the peer connection
+      // Store the connection
       peerConnectionsRef.current.set(peerId, peerConnection);
 
       // Add local stream tracks to the connection
       if (localStreamRef.current) {
-        console.log("Adding local stream tracks to connection");
         localStreamRef.current.getTracks().forEach((track) => {
           peerConnection.addTrack(track, localStreamRef.current);
         });
       }
 
-      // Handle incoming tracks
-      peerConnection.ontrack = (event) => {
-        console.log("Received remote track");
-        const [remoteStream] = event.streams;
-        const videoEl = document.getElementById(`video-${peerId}`);
-        if (videoEl) {
-          videoEl.srcObject = remoteStream;
-        }
-      };
-
-      // Monitor ICE gathering state
-      peerConnection.onicegatheringstatechange = () => {
-        console.log("ICE gathering state:", peerConnection.iceGatheringState);
-        setConnectionStatus(
-          `ICE gathering: ${peerConnection.iceGatheringState}`
-        );
-      };
-
-      // Monitor connection state
-      peerConnection.onconnectionstatechange = () => {
-        console.log("Connection state:", peerConnection.connectionState);
-        setConnectionStatus(`Connection: ${peerConnection.connectionState}`);
-
-        if (peerConnection.connectionState === "connected") {
-          console.log("WebRTC connection established successfully");
-        } else if (
-          ["disconnected", "failed", "closed"].includes(
-            peerConnection.connectionState
-          )
-        ) {
-          console.error("WebRTC connection failed or closed");
-          handlePeerDisconnected({ peerId });
-        }
-      };
-
       // Handle ICE candidates
-      peerConnection.onicecandidate = (event) => {
-        if (event.candidate) {
-          console.log("New ICE candidate:", event.candidate.type);
-          // Send the ICE candidate to the peer through your signaling channel
+      peerConnection.onicecandidate = ({ candidate }) => {
+        if (candidate) {
+          // Send the ICE candidate through signaling
           window.electronAPI.sendSignalingData(peerId, {
             type: "ice-candidate",
-            candidate: event.candidate,
+            candidate: candidate,
           });
         }
       };
 
-      // Create and send offer
-      const offer = await peerConnection.createOffer({
-        offerToReceiveAudio: true,
-        offerToReceiveVideo: true,
-      });
+      // Handle incoming tracks
+      peerConnection.ontrack = (event) => {
+        console.log("Received remote track");
+        if (event.streams && event.streams[0]) {
+          playRemoteStream(event.streams[0]);
+        }
+      };
 
+      // Create and send offer if this is the initiating peer
+      const offer = await peerConnection.createOffer();
       await peerConnection.setLocalDescription(offer);
-      console.log("Local description set, sending offer");
 
-      // Send the offer to the peer through your signaling channel
+      // Send the offer through signaling
       window.electronAPI.sendSignalingData(peerId, {
         type: "offer",
-        sdp: offer,
+        sdp: peerConnection.localDescription,
       });
 
+      setConnectionStatus("WebRTC connection initializing...");
       return peerConnection;
     } catch (err) {
       console.error("Error setting up WebRTC connection:", err);
+      setError("Failed to setup WebRTC connection");
       throw err;
     }
   };
 
   const handleSignalingData = async (data, peerId) => {
     try {
-      console.log("Received signaling data:", data.type, "from peer:", peerId);
-      const peerConnection =
-        peerConnectionsRef.current.get(peerId) ||
-        (await setupWebRTCConnection(peerId));
+      let peerConnection = peerConnectionsRef.current.get(peerId);
+
+      if (!peerConnection) {
+        // Create new connection if we don't have one
+        peerConnection = await setupWebRTCConnection(peerId);
+      }
 
       if (data.type === "offer") {
-        console.log("Processing offer");
         await peerConnection.setRemoteDescription(
           new RTCSessionDescription(data.sdp)
         );
         const answer = await peerConnection.createAnswer();
         await peerConnection.setLocalDescription(answer);
 
-        // Send the answer back
+        // Send answer back
         window.electronAPI.sendSignalingData(peerId, {
           type: "answer",
-          sdp: answer,
+          sdp: peerConnection.localDescription,
         });
       } else if (data.type === "answer") {
-        console.log("Processing answer");
         await peerConnection.setRemoteDescription(
           new RTCSessionDescription(data.sdp)
         );
       } else if (data.type === "ice-candidate") {
-        console.log("Adding ICE candidate");
-        await peerConnection.addIceCandidate(
-          new RTCIceCandidate(data.candidate)
-        );
+        try {
+          await peerConnection.addIceCandidate(
+            new RTCIceCandidate(data.candidate)
+          );
+        } catch (e) {
+          console.error("Error adding received ice candidate:", e);
+        }
       }
     } catch (err) {
       console.error("Error handling signaling data:", err);
-      setError("Failed to establish peer connection");
+      setError("Failed to process signaling data");
     }
   };
 
@@ -297,6 +288,7 @@ function VoiceChat(props) {
         console.log("Setting up connections with existing peers:", connections);
         for (const connection of connections) {
           try {
+            await window.electronAPI.dialVoiceChat(connection.peerId);
             await setupWebRTCConnection(connection.peerId);
             console.log(
               "Successfully set up connection with peer:",
@@ -458,6 +450,20 @@ function VoiceChat(props) {
               alt={isMuted ? "Unmute" : "Mute"}
               style={{ width: "24px", height: "24px" }}
             />
+          </button>
+          <button
+            onClick={leaveVoiceChat}
+            style={{
+              backgroundColor: "#ff4444",
+              color: "white",
+              padding: "10px 20px",
+              borderRadius: "5px",
+              border: "none",
+              cursor: "pointer",
+              fontSize: "16px",
+            }}
+          >
+            Leave Voice Chat
           </button>
         </div>
       )}
