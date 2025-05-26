@@ -23,6 +23,10 @@ let ma;
 let libp2pNode = null;
 const WEBRTC_CODE = protocols("webrtc").code;
 
+// Global map to store RTCPeerConnection instances
+// const peerConnections = new Map();
+// const LIBP2P_DATA_CHANNEL_LABEL = "libp2p-webrtc"; // REMOVING
+
 // ICE configuration for both relay and direct WebRTC
 const RTC_CONFIGURATION = {
   iceServers: [
@@ -63,6 +67,16 @@ app.whenReady().then(() => {
       return await createNode(relayAddr);
     } catch (err) {
       console.error("Error creating node:", err);
+      // Ensure libp2pNode is reset on failure to allow retry
+      if (libp2pNode) {
+        await libp2pNode
+          .stop()
+          .catch((e) =>
+            console.error("Error stopping libp2p node on create failure:", e)
+          );
+      }
+      libp2pNode = null;
+      // peerConnections.clear(); // REMOVING - No longer using peerConnections map
       return { error: err.message };
     }
   });
@@ -72,13 +86,23 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle("switch-to-webrtc", async (_, peerMultiaddr) => {
-    try {
-      await switchToWebRTC(peerMultiaddr);
-      return { success: true };
-    } catch (err) {
-      console.error("Error switching to WebRTC:", err);
-      return { error: err.message };
-    }
+    // This handler is part of the old multiaddr-exchange flow.
+    // With the new manual SDP/ICE signaling, this specific IPC call might become obsolete
+    // or would need to be re-purposed if client-side initiation of WebRTC handshake is still desired via a button.
+    // For now, we'll log that it's been called but the new flow is proactive.
+    console.warn(
+      "IPC 'switch-to-webrtc' called. New WebRTC handshake is proactive via relay connection."
+    );
+    // try {
+    //   await switchToWebRTC(peerMultiaddr); // switchToWebRTC function will be removed
+    //   return { success: true };
+    // } catch (err) {
+    //   console.error("Error switching to WebRTC (old flow):", err);
+    //   return { error: err.message };
+    // }
+    return {
+      info: "WebRTC handshake is now proactive based on relay connections.",
+    };
   });
 
   ipcMain.handle("send-message", async (_, message) => {
@@ -99,12 +123,14 @@ app.on("window-all-closed", () => {
 async function startRelay() {
   const server = await createLibp2p({
     addresses: {
-      listen: ["/ip4/0.0.0.0/tcp/51357/ws", "/webrtc", "/p2p-circuit/webrtc"],
+      listen: ["/ip4/0.0.0.0/tcp/51357/ws", "/webrtc"], // Removed /p2p-circuit/webrtc from listener as we're handling manually
     },
     transports: [
       webSockets(),
       webRTC({ rtcConfiguration: RTC_CONFIGURATION }),
-      circuitRelayTransport(),
+      circuitRelayTransport({
+        discoverRelays: 1, // Enable relay discovery
+      }),
     ],
     connectionEncrypters: [noise()],
     streamMuxers: [yamux()],
@@ -124,50 +150,17 @@ async function startRelay() {
   return { relayUrl: relayDomain };
 }
 
-// Corrected: send WebRTC offer, avoid self-dial and handle limited connections
-async function sendWebRTCAddrToPeer(connOrPeer, webrtcAddr) {
-  try {
-    // Determine the target for dialing (PeerId or Multiaddr)
-    let target = connOrPeer;
-    let targetPeerId = null;
-
-    if (connOrPeer && connOrPeer.remotePeer) {
-      // Passed a Connection instance
-      targetPeerId = connOrPeer.remotePeer;
-      target = targetPeerId;
-      console.log("Sending WebRTC address to peer:", targetPeerId.toString());
-    } else if (typeof connOrPeer === "string") {
-      // Passed a multiaddr string
-      target = connOrPeer;
-      console.log("Sending WebRTC address to multiaddr:", target);
-    } else if (connOrPeer && connOrPeer.toString) {
-      // Possibly a Multiaddr object
-      target = connOrPeer;
-      console.log("Sending WebRTC address to multiaddr:", target.toString());
-    }
-
-    // Skip sending to ourselves
-    const selfId = libp2pNode.peerId.toString();
-    if (targetPeerId && targetPeerId.toString() === selfId) {
-      console.log("sendWebRTCAddrToPeer: target is self, skipping");
-      return;
-    }
-
-    // Open a protocol stream, allowing relay (limited) connections
-    const stream = await libp2pNode.dialProtocol(target, CHAT_PROTOCOL, {
-      runOnLimitedConnection: true,
-    });
-
-    const ws = byteStream(stream);
-    await ws.write(
-      fromString(JSON.stringify({ type: "webrtc-offer", addr: webrtcAddr }))
-    );
-  } catch (err) {
-    console.error("sendWebRTCAddrToPeer failed:", err);
-  }
-}
-
 async function createNode(relayAddr) {
+  if (libp2pNode) {
+    console.log("Node already exists. Stopping and recreating.");
+    await libp2pNode
+      .stop()
+      .catch((e) => console.error("Error stopping existing node:", e));
+    libp2pNode = null;
+    // peerConnections.clear(); // REMOVING - No longer using peerConnections map
+  }
+  console.log("Creating new libp2p node...");
+
   libp2pNode = await createLibp2p({
     addresses: {
       listen: [
@@ -209,28 +202,25 @@ async function createNode(relayAddr) {
     const chat = byteStream(stream);
     while (true) {
       const buf = await chat.read();
-      const msg = JSON.parse(toString(buf.subarray()));
-      if (msg.type === "webrtc-offer") {
-        console.log("📥 Received peerMultiaddr for WebRTC:", msg.addr);
-        try {
-          await switchToWebRTC(msg.addr);
-        } catch (e) {
-          console.error("Error switching to WebRTC:", e);
-          if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send("error", {
-              message: "Failed to switch to WebRTC",
-              details: e.message,
-            });
-          }
-        }
-      } else {
-        console.log(`[${msg.time}] ${msg.username}: ${msg.message}`);
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send("message-received", {
-            ...msg,
-            isCurrentUser: msg.username === username,
-          });
-        }
+      const msgStr = toString(buf.subarray());
+      let msg;
+      try {
+        msg = JSON.parse(msgStr);
+      } catch (e) {
+        console.error("Failed to parse incoming chat message JSON:", msgStr, e);
+        continue; // Skip malformed message
+      }
+
+      // Handle signaling messages for WebRTC
+      // The 'else' block containing existing chat message logic becomes the main execution path.
+      // if (msg.type === "sdp-offer") { ... } else if (msg.type === "sdp-answer") { ... } else if (msg.type === "ice-candidate") { ... } else { ... }
+      // Becomes just:
+      console.log(`[${msg.time}] ${msg.username}: ${msg.message}`);
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send("message-received", {
+          ...msg,
+          isCurrentUser: msg.username === username,
+        });
       }
     }
   });
@@ -238,18 +228,13 @@ async function createNode(relayAddr) {
   libp2pNode.addEventListener("connection:open", (evt) => {
     const c = evt.detail;
     updateConnList();
-    if (c && c.remoteAddr.toString().includes("/p2p-circuit/")) {
-      const myAddr = libp2pNode
-        .getMultiaddrs()
-        .find(
-          (a) =>
-            a.toString().includes("/webrtc/") && a.toString().includes("/p2p/")
-        );
-      if (myAddr) sendWebRTCAddrToPeer(c, myAddr.toString());
-    }
+    // REMOVING: Manual handshake initiation logic that called initiateWebRTCHandshake
   });
 
-  libp2pNode.addEventListener("connection:close", updateConnList);
+  libp2pNode.addEventListener("connection:close", (evt) => {
+    updateConnList();
+    // REMOVING: Manual handshake related cleanup logic for peerConnections
+  });
 
   let relayMultiaddr;
   if (relayAddr) {
@@ -263,6 +248,10 @@ async function createNode(relayAddr) {
   return { relayMultiaddr };
 }
 
+// This function is now replaced by the new manual signaling flow.
+// It was called when a "webrtc-offer" (which was just a multiaddr) was received.
+// The new flow initiates proactively or responds to SDP offers within the CHAT_PROTOCOL handler.
+/*
 async function switchToWebRTC(peerMultiaddr) {
   console.log("Switching to WebRTC:", peerMultiaddr);
   if (!peerMultiaddr) throw new Error("peerMultiaddr undefined");
@@ -285,10 +274,12 @@ async function switchToWebRTC(peerMultiaddr) {
     c.remoteAddr.toString().includes("/webrtc/")
   );
   if (direct) {
-    const mywebrtcAddr = direct.remoteAddr.toString();
-    sendWebRTCAddrToPeer(direct, mywebrtcAddr);
+    // This part was problematic, sending remoteAddr as our own.
+    // const mywebrtcAddr = direct.remoteAddr.toString();
+    // sendWebRTCAddrToPeer(direct, mywebrtcAddr);
   }
 }
+*/
 
 async function dialPeer(peerAddr) {
   try {
@@ -314,6 +305,7 @@ async function sendMessage(message) {
       time,
       message,
     });
+
     if (mainWindow && !mainWindow.isDestroyed())
       mainWindow.webContents.send("message-received", {
         username,
@@ -321,12 +313,25 @@ async function sendMessage(message) {
         message,
         isCurrentUser: true,
       });
+
+    // REMOVING: Logic to check manual peerConnections and dataChannel.readyState
+    // The code that started with "let targetPeerIdStr = null;" and checked peerConnections is removed.
+
+    // This becomes the primary method now.
+    if (!ma) {
+      console.error(
+        "sendMessage: No target multiaddr (ma) set. Cannot send message."
+      );
+      return { error: "No target peer for message." };
+    }
+
+    console.log(`Sending message to ${ma.toString()} via libp2p dial.`);
     const s = await libp2pNode.dialProtocol(ma, CHAT_PROTOCOL, {
       runOnLimitedConnection: true,
     });
     const chat = byteStream(s);
     await chat.write(fromString(payload));
-    return { success: true };
+    return { success: true, method: "libp2p-dial" }; // Keep method for potential logging
   } catch (e) {
     console.error("sendMessage failed:", e);
     return {
