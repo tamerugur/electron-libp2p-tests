@@ -18,9 +18,11 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 let mainWindow;
 const CHAT_PROTOCOL = "/libp2p/examples/chat/1.0.0";
+const VOICE_CHAT_PROTOCOL = "/libp2p/examples/voice/1.0.0";
 let username;
 let ma;
 let libp2pNode = null;
+let currentVoiceCallStream = null;
 const WEBRTC_CODE = protocols("webrtc").code;
 
 // Global map to store RTCPeerConnection instances
@@ -114,6 +116,102 @@ app.whenReady().then(() => {
     console.log("Username set to:", username);
     return { success: true, username };
   });
+
+  // New IPC Handlers for Voice Chat
+  ipcMain.handle("initiate-voice-call", async (_, peerAddrStr) => {
+    if (!libp2pNode) return { error: "Libp2p node not initialized." };
+    if (!ma && !peerAddrStr)
+      return {
+        error: "No peer address provided and no default peer (ma) set.",
+      };
+
+    const targetAddr = peerAddrStr ? multiaddr(peerAddrStr) : ma;
+    if (!targetAddr) return { error: "Invalid peer address." };
+
+    try {
+      if (currentVoiceCallStream) {
+        console.log(
+          "Terminating existing voice call stream before initiating new outgoing call."
+        );
+        // Use peerId from the existing stream if possible for the termination event
+        const oldPeerId = currentVoiceCallStream.remotePeer
+          ? currentVoiceCallStream.remotePeer.toString()
+          : null;
+        await terminateVoiceCallLogic("New call initiated", oldPeerId);
+      }
+      console.log(`Initiating voice call to ${targetAddr.toString()}`);
+      currentVoiceCallStream = await libp2pNode.dialProtocol(
+        targetAddr,
+        VOICE_CHAT_PROTOCOL,
+        {
+          runOnLimitedConnection: true,
+        }
+      );
+      console.log(
+        "Voice stream established for outgoing call to:",
+        targetAddr.toString()
+      );
+      mainWindow.webContents.send("voice-call-initiated", {
+        peerAddr: targetAddr.toString(),
+        streamId: currentVoiceCallStream.id,
+      });
+      return { success: true, peerAddr: targetAddr.toString() };
+    } catch (err) {
+      console.error("Error initiating voice call:", err);
+      if (currentVoiceCallStream) {
+        // Should be null if dialProtocol failed, but defensive
+        await currentVoiceCallStream
+          .close()
+          .catch((e) =>
+            console.error("Error closing failed outgoing stream attempt:", e)
+          );
+      }
+      currentVoiceCallStream = null; // Ensure it's null on failure
+      return { error: err.message };
+    }
+  });
+
+  ipcMain.handle("send-voice-chunk", async (_, chunk) => {
+    if (!currentVoiceCallStream) {
+      // This log can be very noisy if called frequently when no stream exists.
+      // console.warn("send-voice-chunk: No active voice stream to send chunk.");
+      return { error: "No active voice stream." };
+    }
+    try {
+      await byteStream(currentVoiceCallStream).write(chunk); // chunk from renderer is already Uint8Array
+      return { success: true };
+    } catch (err) {
+      console.error("Error sending voice chunk:", err);
+      if (
+        err.message.includes("stream ended") ||
+        err.message.includes("voetbal") ||
+        err.message.includes("reset") ||
+        err.message.includes("closed")
+      ) {
+        console.warn(
+          "Voice stream closed or reset while sending. Terminating call from send-voice-chunk."
+        );
+        const peerIdForEvent =
+          currentVoiceCallStream && currentVoiceCallStream.remotePeer
+            ? currentVoiceCallStream.remotePeer.toString()
+            : null;
+        await terminateVoiceCallLogic(
+          "Stream error during send",
+          peerIdForEvent
+        );
+      }
+      return { error: err.message };
+    }
+  });
+
+  ipcMain.handle("terminate-voice-call", async () => {
+    // User-initiated termination from renderer
+    const peerIdForEvent =
+      currentVoiceCallStream && currentVoiceCallStream.remotePeer
+        ? currentVoiceCallStream.remotePeer.toString()
+        : null;
+    return await terminateVoiceCallLogic("User action", peerIdForEvent);
+  });
 });
 
 app.on("window-all-closed", () => {
@@ -198,8 +296,10 @@ async function createNode(relayAddr) {
     });
   }
 
-  libp2pNode.handle(CHAT_PROTOCOL, async ({ stream }) => {
+  libp2pNode.handle(CHAT_PROTOCOL, async ({ stream, connection }) => {
     const chat = byteStream(stream);
+    const remotePeerAddr = connection.remoteAddr.toString();
+
     while (true) {
       const buf = await chat.read();
       const msgStr = toString(buf.subarray());
@@ -215,12 +315,118 @@ async function createNode(relayAddr) {
       // The 'else' block containing existing chat message logic becomes the main execution path.
       // if (msg.type === "sdp-offer") { ... } else if (msg.type === "sdp-answer") { ... } else if (msg.type === "ice-candidate") { ... } else { ... }
       // Becomes just:
-      console.log(`[${msg.time}] ${msg.username}: ${msg.message}`);
+      console.log(
+        `[${msg.time}] ${msg.username} (${remotePeerAddr}): ${msg.message}`
+      );
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send("message-received", {
           ...msg,
           isCurrentUser: msg.username === username,
+          peerAddr: remotePeerAddr,
         });
+      }
+    }
+  });
+
+  // Handle incoming voice streams
+  libp2pNode.handle(VOICE_CHAT_PROTOCOL, async ({ stream, connection }) => {
+    const remotePeerIdStr = connection.remotePeer.toString();
+    console.log(
+      `Incoming voice stream from ${remotePeerIdStr} (stream ID: ${stream.id})`
+    );
+
+    if (currentVoiceCallStream && currentVoiceCallStream !== stream) {
+      console.log(
+        "Incoming call while another voice stream is active. Closing previous stream and accepting new one."
+      );
+      const oldPeerId = currentVoiceCallStream.remotePeer
+        ? currentVoiceCallStream.remotePeer.toString()
+        : null;
+      await terminateVoiceCallLogic("Replaced by new incoming call", oldPeerId);
+    } else if (currentVoiceCallStream === stream) {
+      console.warn(
+        "VOICE_CHAT_PROTOCOL handler called for an already active stream. This is unusual. Ignoring."
+      );
+      // This case should ideally not happen if libp2p handles protocol negotiation correctly on a single stream.
+      // Or, if it does, it might mean a re-negotiation we don't need to explicitly handle here if `stream` is the same object.
+      return;
+    }
+
+    currentVoiceCallStream = stream; // Assign the new incoming stream as the active one
+
+    mainWindow.webContents.send("incoming-voice-call", {
+      peerId: remotePeerIdStr,
+      streamId: stream.id,
+    });
+
+    const voiceReader = byteStream(stream);
+    try {
+      while (true) {
+        const rawChunk = await voiceReader.read(); // This is likely Uint8ArrayList or similar
+
+        if (!rawChunk || rawChunk.length === 0) {
+          // Stream ended cleanly or empty chunk
+          if (!rawChunk)
+            console.log(
+              `Voice stream with ${remotePeerIdStr} ended cleanly (read returned null/undefined).`
+            );
+          else
+            console.log(
+              `Voice stream with ${remotePeerIdStr} sent empty chunk.`
+            );
+          break; // Exit loop if stream ended or empty chunk that signifies end.
+        }
+
+        // Convert Uint8ArrayList (or similar) to a single Uint8Array
+        const finalChunk = rawChunk.subarray();
+
+        if (finalChunk.length === 0) {
+          console.warn(
+            `[main.js] VOICE_CHAT_PROTOCOL: rawChunk.subarray() resulted in an empty finalChunk. Original rawChunk length: ${rawChunk.length}. Skipping send.`
+          );
+          // Continue to the next iteration of the read loop, effectively dropping this empty chunk.
+          // If this happens often, it might indicate an issue with the sender or the stream.
+          continue;
+        }
+
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send("voice-chunk-received", {
+            peerId: remotePeerIdStr,
+            chunk: finalChunk,
+          });
+        }
+      }
+    } catch (err) {
+      console.error(
+        `Error reading from voice stream with ${remotePeerIdStr}: ${err.message}`
+      );
+      // Error will be handled by the finally block if this was the active stream
+    } finally {
+      console.log(
+        `Read loop for voice stream with ${remotePeerIdStr} (stream ID: ${stream.id}) has ended.`
+      );
+      // If the stream that ended was the one we consider active for the call:
+      if (currentVoiceCallStream === stream) {
+        console.log(
+          "The active voice call stream (incoming) has ended. Terminating call logic via finally block."
+        );
+        await terminateVoiceCallLogic(
+          "Remote stream ended (incoming)",
+          remotePeerIdStr
+        );
+      } else {
+        console.log(
+          `Non-active or already replaced stream (ID: ${stream.id}) for peer ${remotePeerIdStr} ended. No action on currentVoiceCallStream.`
+        );
+        // Ensure this specific stream is closed if it wasn't the active one that got closed by terminateVoiceCallLogic
+        stream
+          .close()
+          .catch((e) =>
+            console.warn(
+              "Error closing non-active stream in finally:",
+              e.message
+            )
+          );
       }
     }
   });
@@ -242,8 +448,31 @@ async function createNode(relayAddr) {
     await new Promise((r) => setTimeout(r, 10000));
     libp2pNode.getMultiaddrs().forEach((a) => {
       const s = a.toString();
-      if (s.startsWith("/dns4/") && s.includes("/webrtc/")) relayMultiaddr = s;
+      // Ensure we are picking a /webrtc multiaddr that is not /p2p-circuit unless it also has webrtc
+      // Prefer direct webrtc addresses if available after relay connection.
+      if (
+        s.includes("/webrtc") &&
+        (s.startsWith("/dns4/") || s.startsWith("/ip4/"))
+      ) {
+        if (
+          !s.includes("/p2p-circuit") ||
+          (s.includes("/p2p-circuit") && s.includes("/webrtc/"))
+        ) {
+          relayMultiaddr = s; // This could be a direct WebRTC addr or a relayed one
+        }
+      }
     });
+    if (!relayMultiaddr) {
+      // Fallback if no ideal address was found
+      libp2pNode.getMultiaddrs().forEach((a) => {
+        const s = a.toString();
+        if (s.includes("/p2p-circuit/webrtc")) relayMultiaddr = s;
+      });
+    }
+    console.log(
+      "Selected node multiaddr for WebRTC (via relay or direct):",
+      relayMultiaddr
+    );
   }
   return { relayMultiaddr };
 }
@@ -342,4 +571,33 @@ async function sendMessage(message) {
       },
     };
   }
+}
+
+async function terminateVoiceCallLogic(reason = "Call ended", peerId = null) {
+  if (currentVoiceCallStream) {
+    const streamToClose = currentVoiceCallStream;
+    currentVoiceCallStream = null; // Nullify early to prevent race conditions / re-entry issues
+    console.log(
+      `terminateVoiceCallLogic: Closing current voice call stream. Reason: ${reason}`
+    );
+    try {
+      await streamToClose.close();
+    } catch (closeErr) {
+      console.error(
+        "Error closing voice stream in terminateVoiceCallLogic:",
+        closeErr
+      );
+    }
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      const eventPeerId = streamToClose.remotePeer
+        ? streamToClose.remotePeer.toString()
+        : peerId;
+      mainWindow.webContents.send("voice-call-terminated", {
+        peerId: eventPeerId,
+        reason,
+      });
+    }
+    return { success: true, reason };
+  }
+  return { info: "No active voice call to terminate." };
 }

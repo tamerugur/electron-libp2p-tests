@@ -42,6 +42,17 @@ function Chat(props) {
     }
   };
 
+  const handlePeerSelect = (peerAddr) => {
+    if (props.onPeerSelected && peerAddr) {
+      props.onPeerSelected(peerAddr);
+      console.log("Selected peer for voice call:", peerAddr);
+    } else {
+      console.warn(
+        "Cannot select peer: no peerAddr available on message or onPeerSelected not provided."
+      );
+    }
+  };
+
   return (
     <div
       style={{
@@ -78,9 +89,26 @@ function Chat(props) {
                 color: "#888",
               }}
             >
-              <span style={{ fontWeight: "bold", color: "#4752C4" }}>
-                {msg.username}
-              </span>
+              {!msg.isCurrentUser && msg.peerAddr ? (
+                <button
+                  onClick={() => handlePeerSelect(msg.peerAddr)}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    padding: 0,
+                    fontWeight: "bold",
+                    color: "#7289da",
+                    cursor: "pointer",
+                    textDecoration: "underline",
+                  }}
+                >
+                  {msg.username}
+                </button>
+              ) : (
+                <span style={{ fontWeight: "bold", color: "#4752C4" }}>
+                  {msg.username}
+                </span>
+              )}
               <span style={{ fontSize: "0.8rem" }}>{msg.time}</span>
             </div>
             <div
