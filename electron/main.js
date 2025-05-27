@@ -84,7 +84,8 @@ app.whenReady().then(() => {
     if (!ma) return { error: "No peer connection available" };
     const peerId = ma.getPeerId();
     const stream = voiceStreams.get(peerId);
-    if (!stream) return { error: "No active voice stream." };
+    if (!stream || stream.source?.ended)
+      return { error: "No active voice stream." };
 
     try {
       await stream.write(chunk);
@@ -381,7 +382,33 @@ async function switchToWebRTC(peerMultiaddr) {
       console.log("Relay connections closed, WebRTC active!");
       const webrtcMultiaddr = `/p2p/${peerId}/webrtc`;
       console.log("Sharing WebRTC multiaddr:", webrtcMultiaddr);
-      sendWebRTCAddrToPeer(peerId, webrtcMultiaddr);
+
+      // send our WebRTC address back to peer over CHAT_PROTOCOL
+      try {
+        const stream = await libp2pNode.dialProtocol(ma, CHAT_PROTOCOL);
+        const chatStream = byteStream(stream);
+        const selfAddr = libp2pNode
+          .getMultiaddrs()
+          .find((a) => a.toString().includes("/p2p/"));
+
+        if (selfAddr) {
+          await chatStream.write(
+            fromString(
+              JSON.stringify({
+                type: "webrtc-addr",
+                multiaddr: selfAddr.toString(),
+              })
+            )
+          );
+          console.log(
+            "Sent our WebRTC multiaddr to peer:",
+            selfAddr.toString()
+          );
+        }
+      } catch (sendErr) {
+        console.error("Failed to send our WebRTC multiaddr to peer:", sendErr);
+      }
+
       try {
         const voiceStream = await libp2pNode.dialProtocol(ma, VOICE_PROTOCOL);
         voiceStreams.set(peerId, byteStream(voiceStream));
@@ -389,6 +416,7 @@ async function switchToWebRTC(peerMultiaddr) {
       } catch (err) {
         console.error("Failed to open voice stream:", err);
       }
+
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send("voice-call-initiated", {
           peerAddr: webrtcMultiaddr,
