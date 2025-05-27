@@ -267,7 +267,9 @@ async function createNode(relayAddr) {
   });
 
   libp2pNode.handle(VOICE_PROTOCOL, async ({ stream, connection }) => {
+    const peerId = connection.remotePeer.toString();
     const voiceStream = byteStream(stream);
+    voiceStreams.set(peerId, voiceStream);
     console.log("Incoming voice stream from", connection.remotePeer.toString());
 
     while (true) {
@@ -275,6 +277,12 @@ async function createNode(relayAddr) {
       if (!chunk) break;
 
       if (mainWindow && !mainWindow.isDestroyed()) {
+        console.log("Forwarding audio chunk to renderer. Bytes:", chunk.length);
+        mainWindow.webContents.send("voice-chunk-received", {
+          peerId,
+          chunk: chunk.subarray(),
+        });
+
         mainWindow.webContents.send("voice-chunk-received", {
           peerId: connection.remotePeer.toString(),
           chunk: chunk.subarray(), // Send Uint8Array to renderer

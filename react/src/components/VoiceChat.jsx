@@ -5,6 +5,8 @@ const VoiceChat = ({ chatHeight, chatWidth, currentPeerAddr }) => {
   const [inCall, setInCall] = useState(false);
   const [callStatus, setCallStatus] = useState("Idle");
   const [peerId, setPeerId] = useState(null);
+  const [isPeerSpeaking, setIsPeerSpeaking] = useState(false);
+  const [isSelfSpeaking, setIsSelfSpeaking] = useState(false);
 
   const mediaRecorderRef = useRef(null);
   const audioContextRef = useRef(null);
@@ -12,11 +14,11 @@ const VoiceChat = ({ chatHeight, chatWidth, currentPeerAddr }) => {
   const isPlayingRef = useRef(false);
   const localStreamRef = useRef(null);
 
+  const peerSpeakingTimeout = useRef(null);
+  const selfSpeakingTimeout = useRef(null);
+
   const stopMediaRecording = () => {
-    if (
-      mediaRecorderRef.current &&
-      mediaRecorderRef.current.state !== "inactive"
-    ) {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
       mediaRecorderRef.current.stop();
       console.log("MediaRecorder stopped.");
     }
@@ -29,9 +31,7 @@ const VoiceChat = ({ chatHeight, chatWidth, currentPeerAddr }) => {
 
   const cleanupAudio = () => {
     if (audioContextRef.current && audioContextRef.current.state !== "closed") {
-      audioContextRef.current
-        .close()
-        .then(() => console.log("AudioContext closed."));
+      audioContextRef.current.close().then(() => console.log("AudioContext closed."));
     }
     audioQueueRef.current = [];
     isPlayingRef.current = false;
@@ -43,12 +43,9 @@ const VoiceChat = ({ chatHeight, chatWidth, currentPeerAddr }) => {
 
     const { chunk } = audioQueueRef.current.shift();
 
-    if (
-      !audioContextRef.current ||
-      audioContextRef.current.state === "closed"
-    ) {
-      audioContextRef.current = new (window.AudioContext ||
-        window.webkitAudioContext)();
+    if (!audioContextRef.current || audioContextRef.current.state === "closed") {
+      audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
+      await audioContextRef.current.resume();
     }
 
     let arrayBufferChunk;
@@ -70,9 +67,7 @@ const VoiceChat = ({ chatHeight, chatWidth, currentPeerAddr }) => {
     }
 
     try {
-      const audioBuffer = await audioContextRef.current.decodeAudioData(
-        arrayBufferChunk
-      );
+      const audioBuffer = await audioContextRef.current.decodeAudioData(arrayBufferChunk);
       const source = audioContextRef.current.createBufferSource();
       source.buffer = audioBuffer;
       source.connect(audioContextRef.current.destination);
@@ -93,17 +88,26 @@ const VoiceChat = ({ chatHeight, chatWidth, currentPeerAddr }) => {
       setCallStatus("Connected");
       setPeerId(peerAddr);
       setInCall(true);
+      window.electronAPI.switchToWebRTC(peerAddr); // ✅ initiate voice stream back
     };
 
-    const handleIncomingVoiceCall = ({ peerId: remotePeerId }) => {
-      setCallStatus("Connected");
-      setPeerId(remotePeerId);
-      setInCall(true);
-    };
+const handleIncomingVoiceCall = ({ peerId: remotePeerId }) => {
+  setCallStatus("Connected");
+  setPeerId(remotePeerId);
+  setInCall(true);
+  window.electronAPI.switchToWebRTC(`/p2p/${remotePeerId}`);
+};
 
-    const handleVoiceChunkReceived = ({ chunk }) => {
-      audioQueueRef.current.push({ chunk });
-      if (!isPlayingRef.current) playNextChunk();
+    const handleVoiceChunkReceived = ({ peerId: remotePeerId, chunk }) => {
+      audioQueueRef.current.push({ peerId: remotePeerId, chunk });
+      setIsPeerSpeaking(true);
+      clearTimeout(peerSpeakingTimeout.current);
+      peerSpeakingTimeout.current = setTimeout(() => {
+        setIsPeerSpeaking(false);
+      }, 300);
+      if (!isPlayingRef.current) {
+        playNextChunk();
+      }
     };
 
     const handleVoiceCallTerminated = () => {
@@ -135,8 +139,7 @@ const VoiceChat = ({ chatHeight, chatWidth, currentPeerAddr }) => {
     if (
       mediaRecorderRef.current &&
       mediaRecorderRef.current.state === "recording"
-    )
-      return;
+    ) return;
 
     try {
       if (localStreamRef.current) {
@@ -151,6 +154,11 @@ const VoiceChat = ({ chatHeight, chatWidth, currentPeerAddr }) => {
         if (event.data.size > 0 && !isMuted) {
           const arrayBuffer = await event.data.arrayBuffer();
           await window.electronAPI.sendVoiceChunk(new Uint8Array(arrayBuffer));
+          setIsSelfSpeaking(true);
+          clearTimeout(selfSpeakingTimeout.current);
+          selfSpeakingTimeout.current = setTimeout(() => {
+            setIsSelfSpeaking(false);
+          }, 300);
         }
       };
       mediaRecorderRef.current.start(100);
@@ -212,6 +220,14 @@ const VoiceChat = ({ chatHeight, chatWidth, currentPeerAddr }) => {
       <h2>Voice Chat</h2>
       <div>Status: {callStatus}</div>
       {peerId && <div>Connected to: {peerId}</div>}
+      {inCall && (
+        <div style={{ marginTop: "10px", fontSize: "0.9em" }}>
+          {isSelfSpeaking && <div style={{ color: "#5cb85c" }}>🎙️ You are speaking...</div>}
+          {isPeerSpeaking && <div style={{ color: "#5bc0de" }}>🎧 Peer is speaking...</div>}
+          {!isSelfSpeaking && !isPeerSpeaking && <div style={{ color: "#ccc" }}>No one is speaking</div>}
+        </div>
+      )}
+
       {!inCall && currentPeerAddr && (
         <button
           onClick={() => initiateCall(currentPeerAddr)}
