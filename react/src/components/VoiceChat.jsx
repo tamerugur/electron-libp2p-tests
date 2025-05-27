@@ -54,7 +54,15 @@ const VoiceChat = ({ chatHeight, chatWidth, currentPeerAddr }) => {
     ) {
       audioContextRef.current = new (window.AudioContext ||
         window.webkitAudioContext)();
-      await audioContextRef.current.resume();
+    }
+
+    try {
+      if (audioContextRef.current.state === "suspended") {
+        await audioContextRef.current.resume();
+        console.log("AudioContext resumed");
+      }
+    } catch (err) {
+      console.error("Error resuming AudioContext:", err);
     }
 
     let arrayBufferChunk;
@@ -76,23 +84,23 @@ const VoiceChat = ({ chatHeight, chatWidth, currentPeerAddr }) => {
     }
 
     try {
-      const audioBuffer = await audioContextRef.current.decodeAudioData(
-        arrayBufferChunk
-      );
-      const source = audioContextRef.current.createBufferSource();
-      source.buffer = audioBuffer;
-      source.connect(audioContextRef.current.destination);
-      source.onended = () => {
-        isPlayingRef.current = false;
-        if (audioQueueRef.current.length > 0) playNextChunk();
-      };
-      source.start();
-    } catch (error) {
-      console.error("Error playing audio chunk:", error);
-      isPlayingRef.current = false;
-      if (audioQueueRef.current.length > 0) setTimeout(playNextChunk, 0);
-    }
+  const audioBuffer = await audioContextRef.current.decodeAudioData(arrayBufferChunk);
+  const source = audioContextRef.current.createBufferSource();
+  source.buffer = audioBuffer;
+  source.connect(audioContextRef.current.destination);
+  source.onended = () => {
+    isPlayingRef.current = false;
+    if (audioQueueRef.current.length > 0) playNextChunk();
   };
+  source.start();
+} catch (error) {
+  console.error("Error decoding or playing audio chunk:", error);
+  console.log("Audio chunk byteLength:", arrayBufferChunk.byteLength);
+  isPlayingRef.current = false;
+  if (audioQueueRef.current.length > 0) setTimeout(playNextChunk, 0);
+}
+  };
+
 
   useEffect(() => {
     const handleVoiceCallInitiated = ({ peerAddr }) => {

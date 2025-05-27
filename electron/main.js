@@ -81,28 +81,44 @@ app.whenReady().then(() => {
     return { success: true, username };
   });
   ipcMain.handle("send-voice-chunk", async (_, chunk) => {
-  if (!ma) return { error: "No peer connection available" };
-  const peerId = ma.getPeerId();
-  const stream = voiceStreams.get(peerId);
+    if (!ma) {
+      console.error(
+        "[send-voice-chunk] No multiaddr set when sending voice chunk"
+      );
+      return { error: "No peer connection available" };
+    }
+    const peerId = ma.getPeerId();
+    console.log(
+      `[send-voice-chunk] Sending voice chunk to peerId: ${peerId}, chunk length: ${chunk.length}`
+    );
 
-  if (!stream) {
-    console.error("No active voice stream found for peer", peerId);
-    return { error: "No active voice stream." };
-  }
-  if (stream.source?.ended) {
-    console.error("Voice stream already ended for peer", peerId);
-    return { error: "Voice stream already ended." };
-  }
+    const stream = voiceStreams.get(peerId);
+    if (!stream) {
+      console.error(
+        `[send-voice-chunk] No active voice stream found for peer ${peerId}`
+      );
+      return { error: "No active voice stream." };
+    }
 
-  try {
-    await stream.write(chunk);
-    return { success: true };
-  } catch (err) {
-    console.error("Failed to send voice chunk:", err);
-    return { error: err.message };
-  }
-});
+    if (stream.source?.ended) {
+      console.error(
+        `[send-voice-chunk] Voice stream already ended for peer ${peerId}`
+      );
+      return { error: "Voice stream already ended." };
+    }
 
+    try {
+      await stream.write(chunk);
+      console.log(`[send-voice-chunk] Voice chunk sent to peer ${peerId}`);
+      return { success: true };
+    } catch (err) {
+      console.error(
+        `[send-voice-chunk] Failed to send voice chunk to peer ${peerId}:`,
+        err
+      );
+      return { error: err.message };
+    }
+  });
 
   ipcMain.handle("terminate-voice-call", async () => {
     const peerId = ma?.getPeerId();
@@ -335,33 +351,33 @@ async function createNode(relayAddr) {
 
 async function switchToWebRTC(peerMultiaddr) {
   try {
-    console.log(`Dialing peer directly via WebRTC: ${peerMultiaddr}`);
+    console.log(
+      `[switchToWebRTC] Dialing peer directly via WebRTC: ${peerMultiaddr}`
+    );
 
-    if (!peerMultiaddr) {
-      throw new Error("Error: peerMultiaddr is undefined or null");
-    }
+    if (!peerMultiaddr) throw new Error("peerMultiaddr is undefined or null");
 
     ma = multiaddr(peerMultiaddr);
-    if (!ma.toString().includes("/p2p/")) {
-      throw new Error("Error: Invalid multiaddr format, missing /p2p/");
-    }
+    if (!ma.toString().includes("/p2p/"))
+      throw new Error("Invalid multiaddr format, missing /p2p/");
 
     const peerId = ma.getPeerId();
-    console.log("Extracted Peer ID:", peerId);
+    console.log(`[switchToWebRTC] Extracted Peer ID: ${peerId}`);
 
     const peers = Array.from(await libp2pNode.peerStore.all());
     const peerInfo = peers.find((peer) => peer.id.toString() === peerId);
 
     if (!peerInfo) {
-      console.log(`Peer ${peerId} not found in store, attempting to dial...`);
+      console.log(
+        `[switchToWebRTC] Peer ${peerId} not found in store, dialing...`
+      );
       await libp2pNode.dial(ma);
       await new Promise((resolve) => setTimeout(resolve, 2000));
     }
 
     const connections = libp2pNode.getConnections(peerId);
-    if (!connections || connections.length === 0) {
+    if (!connections || connections.length === 0)
       throw new Error("No connections found for peer");
-    }
 
     const hasWebRTC = connections.some((conn) => {
       if (!conn || !conn.remotePeer) return false;
@@ -377,28 +393,34 @@ async function switchToWebRTC(peerMultiaddr) {
     });
 
     if (hasWebRTC) {
-      console.log("WebRTC connection established!");
+      console.log("[switchToWebRTC] WebRTC connection established!");
+
       const relayConnections = connections.filter(
         (conn) =>
           conn.remoteAddr && conn.remoteAddr.toString().includes("/p2p-circuit")
       );
 
       for (const conn of relayConnections) {
+        console.log(
+          `[switchToWebRTC] Closing relay connection: ${conn.remoteAddr.toString()}`
+        );
         await conn.close();
       }
 
-      console.log("Relay connections closed, WebRTC active!");
-      const webrtcMultiaddr = `/p2p/${peerId}/webrtc`;
-      console.log("Sharing WebRTC multiaddr:", webrtcMultiaddr);
+      console.log("[switchToWebRTC] Relay connections closed, WebRTC active!");
 
-      // send our WebRTC address back to peer over CHAT_PROTOCOL
+      const webrtcMultiaddr = `/p2p/${peerId}/webrtc`;
+      console.log(
+        `[switchToWebRTC] Sharing WebRTC multiaddr: ${webrtcMultiaddr}`
+      );
+
+      // Send own multiaddr to peer via chat protocol
       try {
         const stream = await libp2pNode.dialProtocol(ma, CHAT_PROTOCOL);
         const chatStream = byteStream(stream);
         const selfAddr = libp2pNode
           .getMultiaddrs()
           .find((a) => a.toString().includes("/p2p/"));
-
         if (selfAddr) {
           await chatStream.write(
             fromString(
@@ -409,20 +431,33 @@ async function switchToWebRTC(peerMultiaddr) {
             )
           );
           console.log(
-            "Sent our WebRTC multiaddr to peer:",
-            selfAddr.toString()
+            `[switchToWebRTC] Sent our WebRTC multiaddr to peer: ${selfAddr.toString()}`
           );
+        } else {
+          console.warn("[switchToWebRTC] No self multiaddr found to send");
         }
       } catch (sendErr) {
-        console.error("Failed to send our WebRTC multiaddr to peer:", sendErr);
+        console.error(
+          "[switchToWebRTC] Failed to send our WebRTC multiaddr to peer:",
+          sendErr
+        );
       }
 
-      try {
-        const voiceStream = await libp2pNode.dialProtocol(ma, VOICE_PROTOCOL);
-        voiceStreams.set(peerId, byteStream(voiceStream));
-        console.log("Outgoing voice stream established and saved.");
-      } catch (err) {
-        console.error("Failed to open voice stream:", err);
+      // Establish outgoing voice stream ONLY if NOT already present
+      if (!voiceStreams.has(peerId)) {
+        try {
+          const voiceStream = await libp2pNode.dialProtocol(ma, VOICE_PROTOCOL);
+          voiceStreams.set(peerId, byteStream(voiceStream));
+          console.log(
+            "[switchToWebRTC] Outgoing voice stream established and saved."
+          );
+        } catch (err) {
+          console.error("[switchToWebRTC] Failed to open voice stream:", err);
+        }
+      } else {
+        console.log(
+          "[switchToWebRTC] Outgoing voice stream already exists, skipping creation."
+        );
       }
 
       if (mainWindow && !mainWindow.isDestroyed()) {
@@ -432,10 +467,12 @@ async function switchToWebRTC(peerMultiaddr) {
         });
       }
     } else {
-      console.warn("WebRTC connection not confirmed, keeping relay active.");
+      console.warn(
+        "[switchToWebRTC] WebRTC connection not confirmed, keeping relay active."
+      );
     }
   } catch (err) {
-    console.error("Failed to switch to WebRTC:", err);
+    console.error("[switchToWebRTC] Failed:", err);
     throw err;
   }
 }
