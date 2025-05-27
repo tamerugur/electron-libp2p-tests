@@ -188,7 +188,14 @@ async function createNode(relayAddr) {
 
       try {
         const parsed = JSON.parse(rawMessage);
-        console.log(`[${parsed.time}] ${parsed.username}: ${parsed.message}`);
+        if (parsed.type === "webrtc-addr" && parsed.multiaddr) {
+          console.log("Received WebRTC multiaddr:", parsed.multiaddr);
+          const addr = multiaddr(parsed.multiaddr);
+          await libp2pNode.dial(addr);
+          return;
+        } else {
+          console.log(`[${parsed.time}] ${parsed.username}: ${parsed.message}`);
+        }
         if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send("message-received", {
             username: parsed.username,
@@ -352,12 +359,6 @@ async function dialPeer(peerAddr) {
         );
       } else {
         console.warn("No public multiaddr found to send to peer.");
-      }
-
-      if (peerMultiaddr) {
-        const peerMaString = peerMultiaddr.toString();
-        console.log("Sending my multiaddr to the peer:", peerMaString);
-        await chatStream.write(fromString(peerMaString));
       }
     } catch (err) {
       if (signal.aborted) {
