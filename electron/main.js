@@ -86,6 +86,19 @@ app.on("window-all-closed", () => {
   }
 });
 
+function isPublicMultiaddr(addr) {
+  const s = addr.toString();
+  return (
+    s.includes("/dns4/") ||
+    s.includes("/dns6/") ||
+    s.includes("/webrtc") ||
+    (s.includes("/ip4/") &&
+      !s.includes("/ip4/192.") &&
+      !s.includes("/ip4/172.") &&
+      !s.includes("/ip4/10."))
+  );
+}
+
 async function startRelay() {
   const server = await createLibp2p({
     addresses: {
@@ -185,7 +198,24 @@ async function createNode(relayAddr) {
           });
         }
       } catch (err) {
-        console.error("Failed to parse message:", rawMessage, err);
+        if (
+          rawMessage.startsWith("/ip4/") ||
+          rawMessage.startsWith("/dns4/") ||
+          rawMessage.startsWith("/webrtc/")
+        ) {
+          console.log("Received raw multiaddr for WebRTC:", rawMessage);
+
+          try {
+            const addr = multiaddr(rawMessage);
+            console.log("Attempting direct WebRTC dial...");
+            await libp2pNode.dial(addr);
+            console.log("Direct WebRTC connection established!");
+          } catch (dialErr) {
+            console.error("Failed to dial WebRTC address:", dialErr);
+          }
+        } else {
+          console.error("Failed to parse message:", rawMessage, err);
+        }
       }
     }
   });
@@ -303,9 +333,27 @@ async function dialPeer(peerAddr) {
       const chatStream = byteStream(stream);
 
       // Only send our multiaddr without setting up a reader
-      const peerMultiaddr = libp2pNode
-        .getMultiaddrs()
-        .find((addr) => addr.toString().includes("/p2p/"));
+      const peerMultiaddr = libp2pNode.getMultiaddrs().find((addr) => {
+        const s = addr.toString();
+        return s.includes("/p2p/") && isPublicMultiaddr(addr);
+      });
+
+      if (peerMultiaddr) {
+        const peerMaString = peerMultiaddr.toString();
+        console.log("Sending my PUBLIC multiaddr to the peer:", peerMaString);
+
+        await chatStream.write(
+          fromString(
+            JSON.stringify({
+              type: "webrtc-addr",
+              multiaddr: peerMaString,
+            })
+          )
+        );
+      } else {
+        console.warn("No public multiaddr found to send to peer.");
+      }
+
       if (peerMultiaddr) {
         const peerMaString = peerMultiaddr.toString();
         console.log("Sending my multiaddr to the peer:", peerMaString);
