@@ -18,10 +18,12 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 let mainWindow;
 const CHAT_PROTOCOL = "/libp2p/examples/chat/1.0.0";
+const VOICE_PROTOCOL = "/libp2p/examples/voice/1.0.0";
 let username;
 let ma;
 let libp2pNode = null;
 const WEBRTC_CODE = protocols("webrtc").code;
+const voiceStreams = new Map();
 
 function createWindow() {
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;
@@ -77,6 +79,36 @@ app.whenReady().then(() => {
     username = _username || "Anonymous";
     console.log("Username set to:", username);
     return { success: true, username };
+  });
+  ipcMain.handle("send-voice-chunk", async (_, chunk) => {
+    if (!ma) return { error: "No peer connection available" };
+    const peerId = ma.getPeerId();
+    const stream = voiceStreams.get(peerId);
+    if (!stream) return { error: "No active voice stream." };
+
+    try {
+      await stream.write(chunk);
+      return { success: true };
+    } catch (err) {
+      console.error("Failed to send voice chunk:", err);
+      return { error: err.message };
+    }
+  });
+
+  ipcMain.handle("terminate-voice-call", async () => {
+    const peerId = ma?.getPeerId();
+    if (peerId && voiceStreams.has(peerId)) {
+      try {
+        const stream = voiceStreams.get(peerId);
+        await stream.close?.();
+        voiceStreams.delete(peerId);
+        console.log("Voice stream terminated.");
+      } catch (err) {
+        console.error("Error closing voice stream:", err);
+      }
+    }
+
+    return { success: true };
   });
 });
 
@@ -173,6 +205,13 @@ async function createNode(relayAddr) {
         ma = connection.remoteAddr;
         console.log("WebRTC connection:", ma.toString());
         console.log("plain ma ", ma);
+
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send("incoming-voice-call", {
+            peerId: connection.remotePeer.toString(),
+            streamId: connection.remotePeer.toString(),
+          });
+        }
       } else {
         console.log("Connection:", connection.remoteAddr.toString());
       }
@@ -223,6 +262,23 @@ async function createNode(relayAddr) {
         } else {
           console.error("Failed to parse message:", rawMessage, err);
         }
+      }
+    }
+  });
+
+  libp2pNode.handle(VOICE_PROTOCOL, async ({ stream, connection }) => {
+    const voiceStream = byteStream(stream);
+    console.log("Incoming voice stream from", connection.remotePeer.toString());
+
+    while (true) {
+      const chunk = await voiceStream.read();
+      if (!chunk) break;
+
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send("voice-chunk-received", {
+          peerId: connection.remotePeer.toString(),
+          chunk: chunk.subarray(), // Send Uint8Array to renderer
+        });
       }
     }
   });
@@ -318,6 +374,19 @@ async function switchToWebRTC(peerMultiaddr) {
       const webrtcMultiaddr = `/p2p/${peerId}/webrtc`;
       console.log("Sharing WebRTC multiaddr:", webrtcMultiaddr);
       sendWebRTCAddrToPeer(peerId, webrtcMultiaddr);
+      try {
+        const voiceStream = await libp2pNode.dialProtocol(ma, VOICE_PROTOCOL);
+        voiceStreams.set(peerId, byteStream(voiceStream));
+        console.log("Outgoing voice stream established and saved.");
+      } catch (err) {
+        console.error("Failed to open voice stream:", err);
+      }
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send("voice-call-initiated", {
+          peerAddr: webrtcMultiaddr,
+          streamId: peerId,
+        });
+      }
     } else {
       console.warn("WebRTC connection not confirmed, keeping relay active.");
     }
