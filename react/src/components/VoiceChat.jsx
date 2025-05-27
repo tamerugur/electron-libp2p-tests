@@ -167,16 +167,21 @@ const VoiceChat = ({ chatHeight, chatWidth, currentPeerAddr }) => {
         mimeType: "audio/webm;codecs=opus",
       });
       mediaRecorderRef.current.ondataavailable = async (event) => {
+        console.log("MediaRecorder chunk size:", event.data.size);
         if (event.data.size > 0 && !isMuted) {
           const arrayBuffer = await event.data.arrayBuffer();
-          console.log("Sending chunk. Size:", arrayBuffer.byteLength);
+          console.log("Sending chunk with byteLength:", arrayBuffer.byteLength);
           if (arrayBuffer.byteLength > 0) {
-            await window.electronAPI.sendVoiceChunk(
+            const result = await window.electronAPI.sendVoiceChunk(
               new Uint8Array(arrayBuffer)
             );
+            if (result.error) {
+              console.error("Error sending voice chunk:", result.error);
+            }
           }
         }
       };
+
       mediaRecorderRef.current.start(100);
     } catch (err) {
       console.error("Error starting audio:", err);

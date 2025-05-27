@@ -81,20 +81,28 @@ app.whenReady().then(() => {
     return { success: true, username };
   });
   ipcMain.handle("send-voice-chunk", async (_, chunk) => {
-    if (!ma) return { error: "No peer connection available" };
-    const peerId = ma.getPeerId();
-    const stream = voiceStreams.get(peerId);
-    if (!stream || stream.source?.ended)
-      return { error: "No active voice stream." };
+  if (!ma) return { error: "No peer connection available" };
+  const peerId = ma.getPeerId();
+  const stream = voiceStreams.get(peerId);
 
-    try {
-      await stream.write(chunk);
-      return { success: true };
-    } catch (err) {
-      console.error("Failed to send voice chunk:", err);
-      return { error: err.message };
-    }
-  });
+  if (!stream) {
+    console.error("No active voice stream found for peer", peerId);
+    return { error: "No active voice stream." };
+  }
+  if (stream.source?.ended) {
+    console.error("Voice stream already ended for peer", peerId);
+    return { error: "Voice stream already ended." };
+  }
+
+  try {
+    await stream.write(chunk);
+    return { success: true };
+  } catch (err) {
+    console.error("Failed to send voice chunk:", err);
+    return { error: err.message };
+  }
+});
+
 
   ipcMain.handle("terminate-voice-call", async () => {
     const peerId = ma?.getPeerId();
