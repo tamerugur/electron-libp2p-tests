@@ -2,7 +2,7 @@
   "name": "electron-libp2p-tests",
   "version": "1.0.0",
   "type": "module",
-  "main": "dist/main.js",
+  "main": "electron/main.js",
   "scripts": {
     "dev": "concurrently \"npm run dev:vite\" \"npm run dev:electron\"",
     "dev:vite": "cd react && npm run dev",
