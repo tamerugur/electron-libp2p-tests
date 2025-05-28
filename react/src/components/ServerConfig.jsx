@@ -60,8 +60,37 @@ function ServerConfig({
   };
 
   // Handler for stun/turn server button
-  const handleStunTurnButton = () => {
-    // TODO: Implement stun/turn server logic
+  const handleStunTurnButton = async () => {
+    if (!useCustomStunTurn) return;
+    // Collect valid stun/turn server configs
+    const stunTurnConfig = [];
+    if (stunServer.trim()) {
+      stunTurnConfig.push({ urls: [stunServer.trim()] });
+    }
+    if (turnServer.trim()) {
+      const turnEntry = { urls: [turnServer.trim()] };
+      if (turnUsername.trim()) turnEntry.username = turnUsername.trim();
+      if (turnCredential.trim()) turnEntry.credential = turnCredential.trim();
+      stunTurnConfig.push(turnEntry);
+    }
+    if (stunTurnConfig.length === 0) {
+      setStatusMessage("Please enter at least one STUN or TURN server.");
+      return;
+    }
+    try {
+      const response = await window.electronAPI.setStunTurnConfig(
+        stunTurnConfig
+      );
+      if (response.success) {
+        setStatusMessage("STUN/TURN configuration set!");
+      } else {
+        setStatusMessage("Failed to set STUN/TURN configuration.");
+      }
+    } catch (error) {
+      setStatusMessage(
+        `Failed to set STUN/TURN configuration: ${error.message}`
+      );
+    }
   };
 
   const handleSendConfigurations = () => {
@@ -291,6 +320,30 @@ function ServerConfig({
           color: "white",
         }}
       />
+      {useCustomStunTurn && (
+        <button
+          onClick={handleStunTurnButton}
+          disabled={!(stunServer.trim() || turnServer.trim())}
+          style={{
+            backgroundColor: !(stunServer.trim() || turnServer.trim())
+              ? "#888"
+              : "#5865F2",
+            color: "white",
+            padding: "6px 14px",
+            border: "none",
+            borderRadius: "5px",
+            cursor: !(stunServer.trim() || turnServer.trim())
+              ? "not-allowed"
+              : "pointer",
+            opacity: !(stunServer.trim() || turnServer.trim()) ? 0.5 : 1,
+            marginBottom: "10px",
+            marginTop: "-10px",
+            alignSelf: "flex-start",
+          }}
+        >
+          Set STUN/TURN Config
+        </button>
+      )}
 
       <div style={{ marginTop: "10px", display: "flex", gap: "10px" }}>
         <button

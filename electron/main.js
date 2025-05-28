@@ -23,6 +23,7 @@ let username;
 let ma;
 let libp2pNode = null;
 let userRelayAddr = null;
+let userStunTurnConfig = null;
 const WEBRTC_CODE = protocols("webrtc").code;
 const voiceStreams = new Map();
 
@@ -48,6 +49,12 @@ app.whenReady().then(() => {
     userRelayAddr = relayAddr;
     console.log("User relay address set to:", userRelayAddr);
     return { success: true, relayAddr: userRelayAddr };
+  });
+
+  ipcMain.handle("set-stun-turn-config", async (_, stunTurnConfig) => {
+    userStunTurnConfig = stunTurnConfig;
+    console.log("User STUN/TURN config set to:", userStunTurnConfig);
+    return { success: true, stunTurnConfig: userStunTurnConfig };
   });
 
   ipcMain.handle("start-relay", async () => {
@@ -166,6 +173,13 @@ function isPublicMultiaddr(addr) {
 async function startRelay() {
   const relayToUse =
     userRelayAddr || "/dns4/relay.sadhqwiodnjizux.space/tcp/443/wss";
+  const iceServers =
+    userStunTurnConfig && userStunTurnConfig.length > 0
+      ? userStunTurnConfig
+      : [
+          { urls: ["stun:stun.l.google.com:19302"] },
+          { urls: ["stun:global.stun.twilio.com:3478"] },
+        ];
   const server = await createLibp2p({
     addresses: {
       listen: ["/ip4/0.0.0.0/tcp/51357/ws", "/webrtc", "/p2p-circuit/webrtc"],
@@ -174,10 +188,7 @@ async function startRelay() {
       webSockets(),
       webRTC({
         rtcConfiguration: {
-          iceServers: [
-            { urls: ["stun:stun.l.google.com:19302"] },
-            { urls: ["stun:global.stun.twilio.com:3478"] },
-          ],
+          iceServers,
         },
       }),
       circuitRelayTransport(),
@@ -206,6 +217,13 @@ async function startRelay() {
 async function createNode(relayAddr) {
   let relayMultiaddr;
   const relayToUse = userRelayAddr || relayAddr;
+  const iceServers =
+    userStunTurnConfig && userStunTurnConfig.length > 0
+      ? userStunTurnConfig
+      : [
+          { urls: ["stun:stun.l.google.com:19302"] },
+          { urls: ["stun:global.stun.twilio.com:3478"] },
+        ];
   console.log("Creating Libp2p node...");
 
   libp2pNode = await createLibp2p({
@@ -217,7 +235,11 @@ async function createNode(relayAddr) {
         "/ip4/0.0.0.0/tcp/0/ws",
       ],
     },
-    transports: [webSockets(), webRTC(), circuitRelayTransport()],
+    transports: [
+      webSockets(),
+      webRTC({ rtcConfiguration: { iceServers } }),
+      circuitRelayTransport(),
+    ],
     connectionEncrypters: [noise()],
     streamMuxers: [yamux()],
     connectionGater: { denyDialMultiaddr: () => false },

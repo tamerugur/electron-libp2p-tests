@@ -22,6 +22,8 @@ electron_1.contextBridge.exposeInMainWorld("electronAPI", {
     electron_1.ipcRenderer.invoke("set-username", username),
   setRelayAddr: (relayAddr) =>
     electron_1.ipcRenderer.invoke("set-relay-addr", relayAddr),
+  setStunTurnConfig: (stunTurnConfig) =>
+    electron_1.ipcRenderer.invoke("set-stun-turn-config", stunTurnConfig),
   onMessageReceived: (callback) => {
     electron_1.ipcRenderer.on("message-received", (event, message) =>
       callback(message)
