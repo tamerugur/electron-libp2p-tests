@@ -1,235 +1,250 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState } from "react";
+import ServerConfig from "./ServerConfig";
+const VoiceChat = ({
+  chatHeight,
+  chatWidth,
+  currentPeerAddr,
+  onUsernameStateChange,
+}) => {
+  const [username, setUsername] = useState("");
+  const [usernameLocked, setUsernameLocked] = useState(false);
+  // const [isMuted, setIsMuted] = useState(false);
+  // const [inCall, setInCall] = useState(false);
+  // const [callStatus, setCallStatus] = useState("Idle");
+  // const [peerId, setPeerId] = useState(null);
+  // const [isPeerSpeaking, setIsPeerSpeaking] = useState(false);
+  // const [isSelfSpeaking, setIsSelfSpeaking] = useState(false);
+  const [usernameReady, setUsernameReady] = useState(false);
+  // const mediaRecorderRef = useRef(null);
+  // const audioContextRef = useRef(null);
+  // const audioQueueRef = useRef([]);
+  // const isPlayingRef = useRef(false);
+  // const localStreamRef = useRef(null);
 
-const VoiceChat = ({ chatHeight, chatWidth, currentPeerAddr }) => {
-  const [isMuted, setIsMuted] = useState(false);
-  const [inCall, setInCall] = useState(false);
-  const [callStatus, setCallStatus] = useState("Idle");
-  const [peerId, setPeerId] = useState(null);
-  const [isPeerSpeaking, setIsPeerSpeaking] = useState(false);
-  const [isSelfSpeaking, setIsSelfSpeaking] = useState(false);
+  // const peerSpeakingTimeout = useRef(null);
+  // const selfSpeakingTimeout = useRef(null);
 
-  const mediaRecorderRef = useRef(null);
-  const audioContextRef = useRef(null);
-  const audioQueueRef = useRef([]);
-  const isPlayingRef = useRef(false);
-  const localStreamRef = useRef(null);
+  // const stopMediaRecording = () => {
+  //   if (
+  //     mediaRecorderRef.current &&
+  //     mediaRecorderRef.current.state !== "inactive"
+  //   ) {
+  //     mediaRecorderRef.current.stop();
+  //     console.log("MediaRecorder stopped.");
+  //   }
+  //   if (localStreamRef.current) {
+  //     localStreamRef.current.getTracks().forEach((track) => track.stop());
+  //     localStreamRef.current = null;
+  //     console.log("Microphone access stopped.");
+  //   }
+  // };
 
-  const peerSpeakingTimeout = useRef(null);
-  const selfSpeakingTimeout = useRef(null);
+  // const cleanupAudio = () => {
+  //   if (audioContextRef.current && audioContextRef.current.state !== "closed") {
+  //     audioContextRef.current
+  //       .close()
+  //       .then(() => console.log("AudioContext closed."));
+  //   }
+  //   audioQueueRef.current = [];
+  //   isPlayingRef.current = false;
+  // };
 
-  const stopMediaRecording = () => {
-    if (
-      mediaRecorderRef.current &&
-      mediaRecorderRef.current.state !== "inactive"
-    ) {
-      mediaRecorderRef.current.stop();
-      console.log("MediaRecorder stopped.");
-    }
-    if (localStreamRef.current) {
-      localStreamRef.current.getTracks().forEach((track) => track.stop());
-      localStreamRef.current = null;
-      console.log("Microphone access stopped.");
-    }
+  // const playNextChunk = async () => {
+  //   if (isPlayingRef.current || audioQueueRef.current.length === 0) return;
+  //   isPlayingRef.current = true;
+
+  //   const { chunk } = audioQueueRef.current.shift();
+
+  //   if (
+  //     !audioContextRef.current ||
+  //     audioContextRef.current.state === "closed"
+  //   ) {
+  //     audioContextRef.current = new (window.AudioContext ||
+  //       window.webkitAudioContext)();
+  //   }
+
+  //   try {
+  //     if (audioContextRef.current.state === "suspended") {
+  //       await audioContextRef.current.resume();
+  //       console.log("AudioContext resumed");
+  //     }
+  //   } catch (err) {
+  //     console.error("Error resuming AudioContext:", err);
+  //   }
+
+  //   let arrayBufferChunk;
+  //   if (chunk instanceof ArrayBuffer) arrayBufferChunk = chunk;
+  //   else if (chunk instanceof Uint8Array) arrayBufferChunk = chunk.buffer;
+  //   else if (chunk && chunk.type === "Buffer" && Array.isArray(chunk.data)) {
+  //     arrayBufferChunk = new Uint8Array(chunk.data).buffer;
+  //   } else {
+  //     console.error("Unrecognized audio chunk format:", chunk);
+  //     isPlayingRef.current = false;
+  //     if (audioQueueRef.current.length > 0) setTimeout(playNextChunk, 0);
+  //     return;
+  //   }
+
+  //   if (!arrayBufferChunk || arrayBufferChunk.byteLength === 0) {
+  //     isPlayingRef.current = false;
+  //     if (audioQueueRef.current.length > 0) setTimeout(playNextChunk, 0);
+  //     return;
+  //   }
+
+  //   try {
+  //     const audioBuffer = await audioContextRef.current.decodeAudioData(
+  //       arrayBufferChunk
+  //     );
+  //     const source = audioContextRef.current.createBufferSource();
+  //     source.buffer = audioBuffer;
+  //     source.connect(audioContextRef.current.destination);
+  //     source.onended = () => {
+  //       isPlayingRef.current = false;
+  //       if (audioQueueRef.current.length > 0) playNextChunk();
+  //     };
+  //     source.start();
+  //   } catch (error) {
+  //     console.error("Error decoding or playing audio chunk:", error);
+  //     console.log("Audio chunk byteLength:", arrayBufferChunk.byteLength);
+  //     isPlayingRef.current = false;
+  //     if (audioQueueRef.current.length > 0) setTimeout(playNextChunk, 0);
+  //   }
+  // };
+
+  // useEffect(() => {
+  //   const handleVoiceCallInitiated = ({ peerAddr }) => {
+  //     setCallStatus("Connected");
+  //     setPeerId(peerAddr);
+  //     setInCall(true);
+  //     if (currentPeerAddr) {
+  //       window.electronAPI.switchToWebRTC(currentPeerAddr);
+  //     } else {
+  //       console.warn("Missing currentPeerAddr for incoming call");
+  //     }
+  //   };
+
+  //   const handleIncomingVoiceCall = ({ peerId: remotePeerId }) => {
+  //     setCallStatus("Connected");
+  //     setPeerId(remotePeerId);
+  //     setInCall(true);
+  //     window.electronAPI.switchToWebRTC(`/p2p/${remotePeerId}`);
+  //   };
+
+  //   const handleVoiceChunkReceived = ({ peerId: remotePeerId, chunk }) => {
+  //     audioQueueRef.current.push({ peerId: remotePeerId, chunk });
+  //     setIsPeerSpeaking(true);
+  //     clearTimeout(peerSpeakingTimeout.current);
+  //     peerSpeakingTimeout.current = setTimeout(() => {
+  //       setIsPeerSpeaking(false);
+  //     }, 300);
+  //     if (!isPlayingRef.current) {
+  //       playNextChunk();
+  //     }
+  //   };
+
+  //   const handleVoiceCallTerminated = () => {
+  //     setCallStatus("Terminated");
+  //     setInCall(false);
+  //     setPeerId(null);
+  //     stopMediaRecording();
+  //     cleanupAudio();
+  //   };
+
+  //   window.electronAPI.onVoiceCallInitiated(handleVoiceCallInitiated);
+  //   window.electronAPI.onIncomingVoiceCall(handleIncomingVoiceCall);
+  //   window.electronAPI.onVoiceChunkReceived(handleVoiceChunkReceived);
+  //   window.electronAPI.onVoiceCallTerminated(handleVoiceCallTerminated);
+
+  //   return () => {
+  //     window.electronAPI.removeAllVoiceChatListeners();
+  //     stopMediaRecording();
+  //     cleanupAudio();
+  //     if (inCall) {
+  //       window.electronAPI.terminateVoiceCall().catch(console.error);
+  //     }
+  //   };
+  // }, [isMuted, inCall]);
+
+  // const startSendingAudio = async () => {
+  //   if (!inCall) return stopMediaRecording();
+  //   if (isMuted) return;
+  //   if (
+  //     mediaRecorderRef.current &&
+  //     mediaRecorderRef.current.state === "recording"
+  //   )
+  //     return;
+
+  //   try {
+  //     if (localStreamRef.current) {
+  //       localStreamRef.current.getTracks().forEach((track) => track.stop());
+  //     }
+  //     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  //     localStreamRef.current = stream;
+  //     mediaRecorderRef.current = new MediaRecorder(stream, {
+  //       mimeType: "audio/webm;codecs=opus",
+  //     });
+  //     mediaRecorderRef.current.ondataavailable = async (event) => {
+  //       console.log("MediaRecorder chunk size:", event.data.size);
+  //       if (event.data.size > 0 && !isMuted) {
+  //         const arrayBuffer = await event.data.arrayBuffer();
+  //         console.log("Sending chunk with byteLength:", arrayBuffer.byteLength);
+  //         if (arrayBuffer.byteLength > 0) {
+  //           const result = await window.electronAPI.sendVoiceChunk(
+  //             new Uint8Array(arrayBuffer)
+  //           );
+  //           if (result.error) {
+  //             console.error("Error sending voice chunk:", result.error);
+  //           }
+  //         }
+  //       }
+  //     };
+
+  //     mediaRecorderRef.current.start(100);
+  //   } catch (err) {
+  //     console.error("Error starting audio:", err);
+  //     setCallStatus("Error: Mic access");
+  //   }
+  // };
+
+  // const initiateCall = async (peerAddrToCall) => {
+  //   if (inCall) return;
+  //   setCallStatus("Calling...");
+  //   setPeerId(peerAddrToCall);
+  //   const result = await window.electronAPI.initiateVoiceCall(peerAddrToCall);
+  //   if (result?.error) {
+  //     setCallStatus("Error: Call failed");
+  //     setPeerId(null);
+  //     setInCall(false);
+  //   }
+  // };
+
+  // const hangUp = async () => {
+  //   setCallStatus("Terminating...");
+  //   stopMediaRecording();
+  //   await window.electronAPI.terminateVoiceCall();
+  // };
+
+  // const toggleMute = () => {
+  //   setIsMuted((prev) => !prev);
+  //   if (!isMuted && inCall && mediaRecorderRef.current?.state === "inactive") {
+  //     console.log("Unmuting, restarting MediaRecorder.");
+  //     mediaRecorderRef.current.start(100);
+  //   }
+  // };
+
+  // useEffect(() => {
+  //   if (inCall && !isMuted) {
+  //     startSendingAudio();
+  //   } else if (!inCall) {
+  //     stopMediaRecording();
+  //   }
+  // }, [inCall, isMuted]);
+
+  // Called by ServerConfig when username is set/locked
+  const handleUsernameSet = (uname, locked) => {
+    setUsername(uname);
+    setUsernameLocked(locked);
+    if (onUsernameStateChange) onUsernameStateChange(uname, locked);
   };
-
-  const cleanupAudio = () => {
-    if (audioContextRef.current && audioContextRef.current.state !== "closed") {
-      audioContextRef.current
-        .close()
-        .then(() => console.log("AudioContext closed."));
-    }
-    audioQueueRef.current = [];
-    isPlayingRef.current = false;
-  };
-
-  const playNextChunk = async () => {
-    if (isPlayingRef.current || audioQueueRef.current.length === 0) return;
-    isPlayingRef.current = true;
-
-    const { chunk } = audioQueueRef.current.shift();
-
-    if (
-      !audioContextRef.current ||
-      audioContextRef.current.state === "closed"
-    ) {
-      audioContextRef.current = new (window.AudioContext ||
-        window.webkitAudioContext)();
-    }
-
-    try {
-      if (audioContextRef.current.state === "suspended") {
-        await audioContextRef.current.resume();
-        console.log("AudioContext resumed");
-      }
-    } catch (err) {
-      console.error("Error resuming AudioContext:", err);
-    }
-
-    let arrayBufferChunk;
-    if (chunk instanceof ArrayBuffer) arrayBufferChunk = chunk;
-    else if (chunk instanceof Uint8Array) arrayBufferChunk = chunk.buffer;
-    else if (chunk && chunk.type === "Buffer" && Array.isArray(chunk.data)) {
-      arrayBufferChunk = new Uint8Array(chunk.data).buffer;
-    } else {
-      console.error("Unrecognized audio chunk format:", chunk);
-      isPlayingRef.current = false;
-      if (audioQueueRef.current.length > 0) setTimeout(playNextChunk, 0);
-      return;
-    }
-
-    if (!arrayBufferChunk || arrayBufferChunk.byteLength === 0) {
-      isPlayingRef.current = false;
-      if (audioQueueRef.current.length > 0) setTimeout(playNextChunk, 0);
-      return;
-    }
-
-    try {
-  const audioBuffer = await audioContextRef.current.decodeAudioData(arrayBufferChunk);
-  const source = audioContextRef.current.createBufferSource();
-  source.buffer = audioBuffer;
-  source.connect(audioContextRef.current.destination);
-  source.onended = () => {
-    isPlayingRef.current = false;
-    if (audioQueueRef.current.length > 0) playNextChunk();
-  };
-  source.start();
-} catch (error) {
-  console.error("Error decoding or playing audio chunk:", error);
-  console.log("Audio chunk byteLength:", arrayBufferChunk.byteLength);
-  isPlayingRef.current = false;
-  if (audioQueueRef.current.length > 0) setTimeout(playNextChunk, 0);
-}
-  };
-
-
-  useEffect(() => {
-    const handleVoiceCallInitiated = ({ peerAddr }) => {
-      setCallStatus("Connected");
-      setPeerId(peerAddr);
-      setInCall(true);
-      if (currentPeerAddr) {
-        window.electronAPI.switchToWebRTC(currentPeerAddr);
-      } else {
-        console.warn("Missing currentPeerAddr for incoming call");
-      }
-    };
-
-    const handleIncomingVoiceCall = ({ peerId: remotePeerId }) => {
-      setCallStatus("Connected");
-      setPeerId(remotePeerId);
-      setInCall(true);
-      window.electronAPI.switchToWebRTC(`/p2p/${remotePeerId}`);
-    };
-
-    const handleVoiceChunkReceived = ({ peerId: remotePeerId, chunk }) => {
-      audioQueueRef.current.push({ peerId: remotePeerId, chunk });
-      setIsPeerSpeaking(true);
-      clearTimeout(peerSpeakingTimeout.current);
-      peerSpeakingTimeout.current = setTimeout(() => {
-        setIsPeerSpeaking(false);
-      }, 300);
-      if (!isPlayingRef.current) {
-        playNextChunk();
-      }
-    };
-
-    const handleVoiceCallTerminated = () => {
-      setCallStatus("Terminated");
-      setInCall(false);
-      setPeerId(null);
-      stopMediaRecording();
-      cleanupAudio();
-    };
-
-    window.electronAPI.onVoiceCallInitiated(handleVoiceCallInitiated);
-    window.electronAPI.onIncomingVoiceCall(handleIncomingVoiceCall);
-    window.electronAPI.onVoiceChunkReceived(handleVoiceChunkReceived);
-    window.electronAPI.onVoiceCallTerminated(handleVoiceCallTerminated);
-
-    return () => {
-      window.electronAPI.removeAllVoiceChatListeners();
-      stopMediaRecording();
-      cleanupAudio();
-      if (inCall) {
-        window.electronAPI.terminateVoiceCall().catch(console.error);
-      }
-    };
-  }, [isMuted, inCall]);
-
-  const startSendingAudio = async () => {
-    if (!inCall) return stopMediaRecording();
-    if (isMuted) return;
-    if (
-      mediaRecorderRef.current &&
-      mediaRecorderRef.current.state === "recording"
-    )
-      return;
-
-    try {
-      if (localStreamRef.current) {
-        localStreamRef.current.getTracks().forEach((track) => track.stop());
-      }
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      localStreamRef.current = stream;
-      mediaRecorderRef.current = new MediaRecorder(stream, {
-        mimeType: "audio/webm;codecs=opus",
-      });
-      mediaRecorderRef.current.ondataavailable = async (event) => {
-        console.log("MediaRecorder chunk size:", event.data.size);
-        if (event.data.size > 0 && !isMuted) {
-          const arrayBuffer = await event.data.arrayBuffer();
-          console.log("Sending chunk with byteLength:", arrayBuffer.byteLength);
-          if (arrayBuffer.byteLength > 0) {
-            const result = await window.electronAPI.sendVoiceChunk(
-              new Uint8Array(arrayBuffer)
-            );
-            if (result.error) {
-              console.error("Error sending voice chunk:", result.error);
-            }
-          }
-        }
-      };
-
-      mediaRecorderRef.current.start(100);
-    } catch (err) {
-      console.error("Error starting audio:", err);
-      setCallStatus("Error: Mic access");
-    }
-  };
-
-  const initiateCall = async (peerAddrToCall) => {
-    if (inCall) return;
-    setCallStatus("Calling...");
-    setPeerId(peerAddrToCall);
-    const result = await window.electronAPI.initiateVoiceCall(peerAddrToCall);
-    if (result?.error) {
-      setCallStatus("Error: Call failed");
-      setPeerId(null);
-      setInCall(false);
-    }
-  };
-
-  const hangUp = async () => {
-    setCallStatus("Terminating...");
-    stopMediaRecording();
-    await window.electronAPI.terminateVoiceCall();
-  };
-
-  const toggleMute = () => {
-    setIsMuted((prev) => !prev);
-    if (!isMuted && inCall && mediaRecorderRef.current?.state === "inactive") {
-      console.log("Unmuting, restarting MediaRecorder.");
-      mediaRecorderRef.current.start(100);
-    }
-  };
-
-  useEffect(() => {
-    if (inCall && !isMuted) {
-      startSendingAudio();
-    } else if (!inCall) {
-      stopMediaRecording();
-    }
-  }, [inCall, isMuted]);
 
   return (
     <div
@@ -247,7 +262,12 @@ const VoiceChat = ({ chatHeight, chatWidth, currentPeerAddr }) => {
         borderBottomLeftRadius: "10px",
       }}
     >
-      <h2>Voice Chat</h2>
+      <ServerConfig
+        onUsernameSet={handleUsernameSet}
+        username={username}
+        usernameLocked={usernameLocked}
+      />
+      {/* <h2>Voice Chat</h2>
       <div>Status: {callStatus}</div>
       {peerId && <div>Connected to: {peerId}</div>}
       {inCall && (
@@ -263,8 +283,7 @@ const VoiceChat = ({ chatHeight, chatWidth, currentPeerAddr }) => {
           )}
         </div>
       )}
-
-      {!inCall && currentPeerAddr && (
+      {!inCall && currentPeerAddr && usernameReady && (
         <button
           onClick={() => initiateCall(currentPeerAddr)}
           style={buttonStyle}
@@ -296,7 +315,7 @@ const VoiceChat = ({ chatHeight, chatWidth, currentPeerAddr }) => {
         >
           Dismiss Error
         </button>
-      )}
+      )} */}
     </div>
   );
 };

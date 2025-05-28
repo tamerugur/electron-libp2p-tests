@@ -1,16 +1,17 @@
 // project imports
+import React, { useState } from "react";
 import Chat from "./Chat";
 import Server from "./Server";
 import VoiceChat from "./VoiceChat";
 
-import React, { useState, useEffect } from "react";
-
 function Main(props) {
-  // const [relayStatus, setRelayStatus] = useState(""); // Removed, was unused in JSX
   const [currentPeerAddr, setCurrentPeerAddr] = useState(null);
+  const [usernameLocked, setUsernameLocked] = useState(false);
 
-  // Removed useEffect that set dynamic chatHeight/chatWidth
-  // Removed handleStartRelay, was unused in JSX
+  // Handler to receive username lock state from VoiceChat
+  const handleUsernameStateChange = (uname, locked) => {
+    setUsernameLocked(locked);
+  };
 
   // Define fixed heights and proportional widths for the layout
   const componentHeight = "96vh"; // Example height
@@ -30,7 +31,11 @@ function Main(props) {
         padding: "0", // Reset padding if any was implied
       }}
     >
-      <Server chatHeight={componentHeight} chatWidth={serverWidth} />
+      <Server
+        chatHeight={componentHeight}
+        chatWidth={serverWidth}
+        usernameLocked={usernameLocked}
+      />
       <Chat
         chatHeight={componentHeight}
         chatWidth={chatWidth}
@@ -40,6 +45,7 @@ function Main(props) {
         chatHeight={componentHeight}
         chatWidth={voiceChatWidth}
         currentPeerAddr={currentPeerAddr}
+        onUsernameStateChange={handleUsernameStateChange}
       />
     </div>
   );

@@ -4,6 +4,7 @@ import sendIcon from "../assets/sendIcon.svg";
 function Chat(props) {
   const [messageToSend, setMessageToSend] = useState("");
   const [messages, setMessages] = useState([]);
+  const [connectionReady, setConnectionReady] = useState(false);
   const messagesEndRef = useRef(null);
 
   const scrollToBottom = () => {
@@ -17,8 +18,12 @@ function Chat(props) {
 
     window.electronAPI.onMessageReceived(handleMessageReceived);
 
+    // Listen for connection established event from main process or parent
+    window.electronAPI?.onConnectionReady?.(() => setConnectionReady(true));
+
     return () => {
-      window.electronAPI.removeMessageListeners();
+      window.electronAPI?.removeMessageListeners?.();
+      // Remove connection ready listener if needed
     };
   }, []);
 
@@ -27,7 +32,7 @@ function Chat(props) {
   }, [messages]);
 
   const handleSendMessage = async () => {
-    if (!messageToSend.trim()) return;
+    if (!messageToSend.trim() || !connectionReady) return;
     try {
       await window.electronAPI.sendMessage(messageToSend);
       setMessageToSend("");
@@ -156,8 +161,14 @@ function Chat(props) {
             fontFamily: "Inter, sans-serif",
             fontWeight: "bold",
             color: "#fff",
+            opacity: connectionReady ? 1 : 0.5,
           }}
-          placeholder="Type your message..."
+          placeholder={
+            connectionReady
+              ? "Type your message..."
+              : "Connect to a server to chat..."
+          }
+          disabled={!connectionReady}
         />
         <button
           onClick={handleSendMessage}
@@ -171,11 +182,13 @@ function Chat(props) {
             color: "#4752C4",
             border: "none",
             outline: "none",
-            cursor: "pointer",
+            cursor: connectionReady ? "pointer" : "not-allowed",
             fontSize: "18px",
             fontFamily: "Inter, sans-serif",
             fontWeight: "bold",
+            opacity: connectionReady ? 1 : 0.5,
           }}
+          disabled={!connectionReady}
         >
           <img
             src={sendIcon}

@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 function Server(props) {
+  // Accept usernameLocked as a prop from parent (VoiceChat/Main)
+  const { usernameLocked } = props;
   const [isToggled, setIsToggled] = useState(false);
   const [multiaddrs, setMultiaddrs] = useState([]);
   const [tunnelUrl, setTunnelUrl] = useState("");
@@ -10,25 +12,6 @@ function Server(props) {
   const [peers, setPeers] = useState([]);
   const [peerDialAddr, setPeerDialAddr] = useState("");
   const [dialMessage, setDialMessage] = useState("");
-  const [username, setUsername] = useState("");
-
-  const handleSetUsername = async () => {
-    if (!username.trim()) {
-      setMessage("Please enter a valid username.");
-      return;
-    }
-    try {
-      const response = await window.electronAPI.setUsername(username);
-      if (response.success) {
-        setMessage(`Username set to: ${response.username}`);
-      } else {
-        setMessage("Failed to set username.");
-      }
-    } catch (error) {
-      console.error("Failed to set username:", error);
-      setMessage(`Failed to set username: ${error.message}`);
-    }
-  };
 
   const handleStartServer = async () => {
     setLoading(true);
@@ -184,7 +167,10 @@ function Server(props) {
                 padding: "10px",
                 width: "300px",
                 marginBottom: "10px",
+                opacity: usernameLocked ? 1 : 0.5,
+                pointerEvents: usernameLocked ? "auto" : "none",
               }}
+              disabled={!usernameLocked}
             />
             <button
               onClick={handleDialPeer}
@@ -193,18 +179,30 @@ function Server(props) {
                 color: "white",
                 padding: "10px 20px",
                 borderRadius: "5px",
-                cursor: "pointer",
+                cursor: usernameLocked ? "pointer" : "not-allowed",
                 width: "150px",
                 marginBottom: "10px",
+                opacity: usernameLocked ? 1 : 0.5,
               }}
+              disabled={!usernameLocked}
             >
               Dial Peer
             </button>
           </div>
+          {!usernameLocked && (
+            <div
+              style={{
+                color: "#ffb347",
+                marginTop: "10px",
+                textAlign: "center",
+              }}
+            >
+              In order to continue, you need to set your username first.
+            </div>
+          )}
           {dialMessage && <p>{dialMessage}</p>}
         </div>
       ) : (
-        // Server creation section remains unchanged
         <div
           style={{
             padding: "0 30px",
@@ -225,18 +223,26 @@ function Server(props) {
               padding: "10px 20px",
               border: "none",
               borderRadius: "5px",
-              cursor: "pointer",
+              cursor: usernameLocked ? "pointer" : "not-allowed",
               marginBottom: "20px",
               transition: "transform 0.1s",
+              opacity: usernameLocked ? 1 : 0.5,
             }}
-            onMouseDown={(e) =>
-              (e.currentTarget.style.transform = "scale(0.95)")
-            }
-            onMouseUp={(e) => (e.currentTarget.style.transform = "scale(1)")}
-            onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
+            disabled={!usernameLocked}
           >
             {loading ? "Starting Server..." : "Start the Server"}
           </button>
+          {!usernameLocked && (
+            <div
+              style={{
+                color: "#ffb347",
+                marginTop: "10px",
+                textAlign: "center",
+              }}
+            >
+              In order to continue, you need to set your username first.
+            </div>
+          )}
           {tunnelUrl && (
             <div>
               <h2>Server Information</h2>
@@ -257,53 +263,6 @@ function Server(props) {
           )}
         </div>
       )}
-
-      {/* Username section remains unchanged */}
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          backgroundColor: "#303136",
-          padding: "20px",
-          borderRadius: "10px",
-        }}
-      >
-        <input
-          type="text"
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-          placeholder="Enter Username"
-          style={{
-            padding: "10px",
-            width: "300px",
-            marginBottom: "10px",
-            fontSize: "16px",
-            outline: "none",
-            border: "1px solid #363940",
-            backgroundColor: "#363940",
-            color: "white",
-            marginTop: "40px",
-          }}
-        />
-        <button
-          onClick={handleSetUsername}
-          style={{
-            backgroundColor: "#5865F2",
-            color: "white",
-            padding: "10px 20px",
-            borderRadius: "5px",
-            cursor: "pointer",
-            transition: "transform 0.1s",
-          }}
-          onMouseDown={(e) => (e.currentTarget.style.transform = "scale(0.95)")}
-          onMouseUp={(e) => (e.currentTarget.style.transform = "scale(1)")}
-          onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
-        >
-          Set Username
-        </button>
-        {message && <p>{message}</p>}
-      </div>
     </div>
   );
 }

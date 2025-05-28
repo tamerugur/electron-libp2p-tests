@@ -80,61 +80,61 @@ app.whenReady().then(() => {
     console.log("Username set to:", username);
     return { success: true, username };
   });
-  ipcMain.handle("send-voice-chunk", async (_, chunk) => {
-    if (!ma) {
-      console.error(
-        "[send-voice-chunk] No multiaddr set when sending voice chunk"
-      );
-      return { error: "No peer connection available" };
-    }
-    const peerId = ma.getPeerId();
-    console.log(
-      `[send-voice-chunk] Sending voice chunk to peerId: ${peerId}, chunk length: ${chunk.length}`
-    );
-
-    const stream = voiceStreams.get(peerId);
-    if (!stream) {
-      console.error(
-        `[send-voice-chunk] No active voice stream found for peer ${peerId}`
-      );
-      return { error: "No active voice stream." };
-    }
-
-    if (stream.source?.ended) {
-      console.error(
-        `[send-voice-chunk] Voice stream already ended for peer ${peerId}`
-      );
-      return { error: "Voice stream already ended." };
-    }
-
-    try {
-      await stream.write(chunk);
-      console.log(`[send-voice-chunk] Voice chunk sent to peer ${peerId}`);
-      return { success: true };
-    } catch (err) {
-      console.error(
-        `[send-voice-chunk] Failed to send voice chunk to peer ${peerId}:`,
-        err
-      );
-      return { error: err.message };
-    }
-  });
-
-  ipcMain.handle("terminate-voice-call", async () => {
-    const peerId = ma?.getPeerId();
-    if (peerId && voiceStreams.has(peerId)) {
-      try {
-        const stream = voiceStreams.get(peerId);
-        await stream.close?.();
-        voiceStreams.delete(peerId);
-        console.log("Voice stream terminated.");
-      } catch (err) {
-        console.error("Error closing voice stream:", err);
-      }
-    }
-
-    return { success: true };
-  });
+  // ipcMain.handle("send-voice-chunk", async (_, chunk) => {
+  //   if (!ma) {
+  //     console.error(
+  //       "[send-voice-chunk] No multiaddr set when sending voice chunk"
+  //     );
+  //     return { error: "No peer connection available" };
+  //   }
+  //   const peerId = ma.getPeerId();
+  //   console.log(
+  //     `[send-voice-chunk] Sending voice chunk to peerId: ${peerId}, chunk length: ${chunk.length}`
+  //   );
+  //
+  //   const stream = voiceStreams.get(peerId);
+  //   if (!stream) {
+  //     console.error(
+  //       `[send-voice-chunk] No active voice stream found for peer ${peerId}`
+  //     );
+  //     return { error: "No active voice stream." };
+  //   }
+  //
+  //   if (stream.source?.ended) {
+  //     console.error(
+  //       `[send-voice-chunk] Voice stream already ended for peer ${peerId}`
+  //     );
+  //     return { error: "Voice stream already ended." };
+  //   }
+  //
+  //   try {
+  //     await stream.write(chunk);
+  //     console.log(`[send-voice-chunk] Voice chunk sent to peer ${peerId}`);
+  //     return { success: true };
+  //   } catch (err) {
+  //     console.error(
+  //       `[send-voice-chunk] Failed to send voice chunk to peer ${peerId}:`,
+  //       err
+  //     );
+  //     return { error: err.message };
+  //   }
+  // });
+  //
+  // ipcMain.handle("terminate-voice-call", async () => {
+  //   const peerId = ma?.getPeerId();
+  //   if (peerId && voiceStreams.has(peerId)) {
+  //     try {
+  //       const stream = voiceStreams.get(peerId);
+  //       await stream.close?.();
+  //       voiceStreams.delete(peerId);
+  //       console.log("Voice stream terminated.");
+  //     } catch (err) {
+  //       console.error("Error closing voice stream:", err);
+  //     }
+  //   }
+  //
+  //   return { success: true };
+  // });
 });
 
 app.on("window-all-closed", () => {
@@ -291,30 +291,30 @@ async function createNode(relayAddr) {
     }
   });
 
-  libp2pNode.handle(VOICE_PROTOCOL, async ({ stream, connection }) => {
-    const peerId = connection.remotePeer.toString();
-    const voiceStream = byteStream(stream);
-    voiceStreams.set(peerId, voiceStream);
-    console.log("Incoming voice stream from", connection.remotePeer.toString());
-
-    while (true) {
-      const chunk = await voiceStream.read();
-      if (!chunk) break;
-
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        console.log("Forwarding audio chunk to renderer. Bytes:", chunk.length);
-        mainWindow.webContents.send("voice-chunk-received", {
-          peerId,
-          chunk: chunk.subarray(),
-        });
-
-        mainWindow.webContents.send("voice-chunk-received", {
-          peerId: connection.remotePeer.toString(),
-          chunk: chunk.subarray(), // Send Uint8Array to renderer
-        });
-      }
-    }
-  });
+  // libp2pNode.handle(VOICE_PROTOCOL, async ({ stream, connection }) => {
+  //   const peerId = connection.remotePeer.toString();
+  //   const voiceStream = byteStream(stream);
+  //   voiceStreams.set(peerId, voiceStream);
+  //   console.log("Incoming voice stream from", connection.remotePeer.toString());
+  //
+  //   while (true) {
+  //     const chunk = await voiceStream.read();
+  //     if (!chunk) break;
+  //
+  //     if (mainWindow && !mainWindow.isDestroyed()) {
+  //       console.log("Forwarding audio chunk to renderer. Bytes:", chunk.length);
+  //       mainWindow.webContents.send("voice-chunk-received", {
+  //         peerId,
+  //         chunk: chunk.subarray(),
+  //       });
+  //
+  //       mainWindow.webContents.send("voice-chunk-received", {
+  //         peerId: connection.remotePeer.toString(),
+  //         chunk: chunk.subarray(), // Send Uint8Array to renderer
+  //       });
+  //     }
+  //   }
+  // });
 
   libp2pNode.addEventListener("connection:open", (event) => {
     updateConnList();
@@ -444,21 +444,21 @@ async function switchToWebRTC(peerMultiaddr) {
       }
 
       // Establish outgoing voice stream ONLY if NOT already present
-      if (!voiceStreams.has(peerId)) {
-        try {
-          const voiceStream = await libp2pNode.dialProtocol(ma, VOICE_PROTOCOL);
-          voiceStreams.set(peerId, byteStream(voiceStream));
-          console.log(
-            "[switchToWebRTC] Outgoing voice stream established and saved."
-          );
-        } catch (err) {
-          console.error("[switchToWebRTC] Failed to open voice stream:", err);
-        }
-      } else {
-        console.log(
-          "[switchToWebRTC] Outgoing voice stream already exists, skipping creation."
-        );
-      }
+      // if (!voiceStreams.has(peerId)) {
+      //   try {
+      //     const voiceStream = await libp2pNode.dialProtocol(ma, VOICE_PROTOCOL);
+      //     voiceStreams.set(peerId, byteStream(voiceStream));
+      //     console.log(
+      //       "[switchToWebRTC] Outgoing voice stream established and saved."
+      //     );
+      //   } catch (err) {
+      //     console.error("[switchToWebRTC] Failed to open voice stream:", err);
+      //   }
+      // } else {
+      //   console.log(
+      //     "[switchToWebRTC] Outgoing voice stream already exists, skipping creation."
+      //   );
+      // }
 
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send("voice-call-initiated", {
