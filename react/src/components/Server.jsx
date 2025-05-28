@@ -150,6 +150,7 @@ function Server(props) {
         justifyContent: "flex-start",
         alignItems: "center",
         backgroundColor: "#303136",
+        borderRadius: "10px",
         borderTopRightRadius: "10px",
         borderBottomRightRadius: "10px",
         overflow: "auto",

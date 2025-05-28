@@ -77,6 +77,9 @@ const VoiceChat = ({
         color: "white",
         borderTopLeftRadius: "10px",
         borderBottomLeftRadius: "10px",
+        borderRadius: "10px",
+        margin: 0,
+        boxSizing: "border-box",
       }}
     >
       <ServerConfig

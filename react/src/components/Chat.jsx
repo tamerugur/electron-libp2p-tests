@@ -66,6 +66,7 @@ function Chat(props) {
         display: "flex",
         flexDirection: "column",
         backgroundColor: "#363940",
+        borderRadius: "10px",
       }}
     >
       <div
