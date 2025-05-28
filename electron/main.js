@@ -13,7 +13,7 @@ import { multiaddr, protocols } from "@multiformats/multiaddr";
 import { ping } from "@libp2p/ping";
 import { byteStream } from "it-byte-stream";
 import { fromString, toString } from "uint8arrays";
-
+const isDev = !app.isPackaged;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 let mainWindow;
@@ -40,7 +40,13 @@ function createWindow() {
     },
   });
   mainWindow.setMenuBarVisibility(false);
-  mainWindow.loadURL("http://localhost:5173");
+  if (isDev) {
+    mainWindow.loadURL("http://localhost:5173");
+  } else {
+    mainWindow.loadFile(
+      path.join(__dirname, "..", "react", "dist", "index.html")
+    );
+  }
   mainWindow.maximize();
   mainWindow.show();
 }
