@@ -29,7 +29,6 @@ function ServerConfig({
     try {
       const response = await window.electronAPI.setUsername(username);
       if (response.success) {
-        setStatusMessage(`Username set to: ${response.username}`);
         setUsernameLocked(true);
         if (onUsernameSet) onUsernameSet(username, true);
       } else {
@@ -41,8 +40,23 @@ function ServerConfig({
   };
 
   // Handler for relay server button
-  const handleRelayButton = () => {
-    // TODO: Implement relay server logic
+  const handleRelayButton = async () => {
+    if (!relayServer.trim()) {
+      setStatusMessage("Please enter a relay server address.");
+      return;
+    }
+    try {
+      const response = await window.electronAPI.setRelayAddr(
+        relayServer.trim()
+      );
+      if (response.success) {
+        setStatusMessage("Relay address set!");
+      } else {
+        setStatusMessage("Failed to set relay address.");
+      }
+    } catch (error) {
+      setStatusMessage(`Failed to set relay address: ${error.message}`);
+    }
   };
 
   // Handler for stun/turn server button
@@ -161,22 +175,42 @@ function ServerConfig({
         }}
       />
       {useCustomRelay && (
-        <p
-          style={{
-            marginTop: "10px",
-            backgroundColor: "#1e1f23",
-            padding: "15px",
-            borderRadius: "5px",
-            fontSize: "14px",
-            color: "#ccc",
-            lineHeight: "1.5",
-            border: "1px dashed #555",
-          }}
-        >
-          <strong>Note:</strong> If you will use your own relay server, for the
-          configuration and port management, you need to install{" "}
-          <code>cloudflared</code> and create a basic tunnel.
-        </p>
+        <>
+          <button
+            onClick={handleRelayButton}
+            disabled={!relayServer.trim()}
+            style={{
+              backgroundColor: !relayServer.trim() ? "#888" : "#5865F2",
+              color: "white",
+              padding: "6px 14px",
+              border: "none",
+              borderRadius: "5px",
+              cursor: !relayServer.trim() ? "not-allowed" : "pointer",
+              opacity: !relayServer.trim() ? 0.5 : 1,
+              marginBottom: "10px",
+              marginTop: "-10px",
+              alignSelf: "flex-start",
+            }}
+          >
+            Set Relay Address
+          </button>
+          <p
+            style={{
+              marginTop: "10px",
+              backgroundColor: "#1e1f23",
+              padding: "15px",
+              borderRadius: "5px",
+              fontSize: "14px",
+              color: "#ccc",
+              lineHeight: "1.5",
+              border: "1px dashed #555",
+            }}
+          >
+            <strong>Note:</strong> If you will use your own relay server, for
+            the configuration and port management, you need to install{" "}
+            <code>cloudflared</code> and create a basic tunnel.
+          </p>
+        </>
       )}
 
       <label

@@ -285,10 +285,6 @@ function Server(props) {
           </button>
           {tunnelUrl && (
             <div>
-              <h2>Server Information</h2>
-              <p style={{ wordBreak: "break-word", marginBottom: "20px" }}>
-                Relay URL: {tunnelUrl}
-              </p>
               <h2>Node Multiaddress</h2>
               {multiaddrs ? (
                 <div

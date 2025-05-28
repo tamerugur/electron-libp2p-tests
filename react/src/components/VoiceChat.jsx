@@ -31,6 +31,16 @@ const VoiceChat = ({
       });
   };
 
+  // Utility: Validate STUN/TURN address
+  const isValidStunTurn = (addr) => {
+    // Accepts stun: or turn: or turns: URI, with optional username/password for turn
+    if (typeof addr !== "string") return false;
+    // Basic regex for stun/turn URI
+    const stunTurnRegex =
+      /^(stun:|turns?:)[^\s]+(:\d+)?(\?transport=udp|\?transport=tcp)?$/i;
+    return stunTurnRegex.test(addr.trim());
+  };
+
   // Track relay/stun/turn checkboxes
   const handleRelayChange = (checked) => {
     setUseCustomRelay(checked);
@@ -41,13 +51,15 @@ const VoiceChat = ({
         useCustomStunTurn,
       });
   };
-  const handleStunTurnChange = (checked) => {
+  const handleStunTurnChange = (checked, stunTurnAddr) => {
     setUseCustomStunTurn(checked);
     if (onConfigStateChange)
       onConfigStateChange({
         configurationsSent,
         useCustomRelay,
         useCustomStunTurn: checked,
+        stunTurnAddr,
+        stunTurnValid: isValidStunTurn(stunTurnAddr),
       });
   };
 

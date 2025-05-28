@@ -22,6 +22,7 @@ const VOICE_PROTOCOL = "/libp2p/examples/voice/1.0.0";
 let username;
 let ma;
 let libp2pNode = null;
+let userRelayAddr = null;
 const WEBRTC_CODE = protocols("webrtc").code;
 const voiceStreams = new Map();
 
@@ -42,6 +43,12 @@ function createWindow() {
 
 app.whenReady().then(() => {
   createWindow();
+
+  ipcMain.handle("set-relay-addr", async (_, relayAddr) => {
+    userRelayAddr = relayAddr;
+    console.log("User relay address set to:", userRelayAddr);
+    return { success: true, relayAddr: userRelayAddr };
+  });
 
   ipcMain.handle("start-relay", async () => {
     try {
@@ -157,6 +164,8 @@ function isPublicMultiaddr(addr) {
 }
 
 async function startRelay() {
+  const relayToUse =
+    userRelayAddr || "/dns4/relay.sadhqwiodnjizux.space/tcp/443/wss";
   const server = await createLibp2p({
     addresses: {
       listen: ["/ip4/0.0.0.0/tcp/51357/ws", "/webrtc", "/p2p-circuit/webrtc"],
@@ -188,16 +197,15 @@ async function startRelay() {
 
   await server.start();
 
-  const relayDomain = "/dns4/relay.sadhqwiodnjizux.space/tcp/443/wss";
-
-  console.log("Relay is running at:", relayDomain);
+  console.log("Relay is running at:", relayToUse);
   return {
-    relayUrl: relayDomain,
+    relayUrl: relayToUse,
   };
 }
 
 async function createNode(relayAddr) {
   let relayMultiaddr;
+  const relayToUse = userRelayAddr || relayAddr;
   console.log("Creating Libp2p node...");
 
   libp2pNode = await createLibp2p({
@@ -318,16 +326,20 @@ async function createNode(relayAddr) {
 
   libp2pNode.addEventListener("connection:open", (event) => {
     updateConnList();
+    // Notify renderer that connection is ready
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("connection-ready");
+    }
   });
 
   libp2pNode.addEventListener("connection:close", (event) => {
     updateConnList();
   });
 
-  if (relayAddr) {
+  if (relayToUse) {
     try {
-      console.log(`Dialing relay: ${relayAddr}`);
-      await libp2pNode.dial(multiaddr(relayAddr));
+      console.log(`Dialing relay: ${relayToUse}`);
+      await libp2pNode.dial(multiaddr(relayToUse));
       console.log("Connected to relay!");
       await new Promise((resolve) => setTimeout(resolve, 10000));
 

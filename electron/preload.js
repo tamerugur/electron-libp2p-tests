@@ -20,6 +20,8 @@ electron_1.contextBridge.exposeInMainWorld("electronAPI", {
     electron_1.ipcRenderer.invoke("send-message", message),
   setUsername: (username) =>
     electron_1.ipcRenderer.invoke("set-username", username),
+  setRelayAddr: (relayAddr) =>
+    electron_1.ipcRenderer.invoke("set-relay-addr", relayAddr),
   onMessageReceived: (callback) => {
     electron_1.ipcRenderer.on("message-received", (event, message) =>
       callback(message)
@@ -60,5 +62,8 @@ electron_1.contextBridge.exposeInMainWorld("electronAPI", {
     electron_1.ipcRenderer.removeAllListeners("incoming-voice-call");
     electron_1.ipcRenderer.removeAllListeners("voice-chunk-received");
     electron_1.ipcRenderer.removeAllListeners("voice-call-terminated");
+  },
+  onConnectionReady: (callback) => {
+    electron_1.ipcRenderer.on("connection-ready", () => callback());
   },
 });
