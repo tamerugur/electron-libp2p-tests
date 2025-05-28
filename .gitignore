@@ -27,7 +27,7 @@ compile_commands.json
 /npm/dist
 /npm/path.txt
 /npm/checksums.json
-
+dist.rar
 test.html
 
 .npmrc
