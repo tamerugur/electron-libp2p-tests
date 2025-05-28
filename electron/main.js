@@ -30,8 +30,9 @@ const voiceStreams = new Map();
 function createWindow() {
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;
   mainWindow = new BrowserWindow({
-    width: Math.floor(width * 0.9),
-    height: Math.floor(height * 0.9),
+    width: width,
+    height: height,
+    show: false,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       nodeIntegration: false,
@@ -40,6 +41,8 @@ function createWindow() {
   });
   mainWindow.setMenuBarVisibility(false);
   mainWindow.loadURL("http://localhost:5173");
+  mainWindow.maximize();
+  mainWindow.show();
 }
 
 app.whenReady().then(() => {
