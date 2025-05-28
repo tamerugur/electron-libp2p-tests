@@ -4,6 +4,9 @@ function ServerConfig({
   onUsernameSet,
   usernameLocked: parentLocked,
   username: parentUsername,
+  onConfigSent,
+  onRelayChange,
+  onStunTurnChange,
 }) {
   const [username, setUsername] = useState(parentUsername || "");
   const [usernameLocked, setUsernameLocked] = useState(!!parentLocked);
@@ -16,6 +19,7 @@ function ServerConfig({
   const [turnServer, setTurnServer] = useState("");
   const [turnUsername, setTurnUsername] = useState("");
   const [turnCredential, setTurnCredential] = useState("");
+  const [configurationsSent, setConfigurationsSent] = useState(false);
 
   const handleSetUsername = async () => {
     if (!username.trim()) {
@@ -36,6 +40,37 @@ function ServerConfig({
     }
   };
 
+  // Handler for relay server button
+  const handleRelayButton = () => {
+    // TODO: Implement relay server logic
+  };
+
+  // Handler for stun/turn server button
+  const handleStunTurnButton = () => {
+    // TODO: Implement stun/turn server logic
+  };
+
+  const handleSendConfigurations = () => {
+    setConfigurationsSent(true);
+    if (typeof onConfigSent === "function") onConfigSent(true);
+    // TODO: Implement actual send logic
+  };
+
+  const handleRelayCheckbox = () => {
+    setUseCustomRelay((prev) => {
+      const next = !prev;
+      if (typeof onRelayChange === "function") onRelayChange(next);
+      return next;
+    });
+  };
+  const handleStunTurnCheckbox = () => {
+    setUseCustomStunTurn((prev) => {
+      const next = !prev;
+      if (typeof onStunTurnChange === "function") onStunTurnChange(next);
+      return next;
+    });
+  };
+
   useEffect(() => {
     if (!usernameLocked && onUsernameSet) onUsernameSet(username, false);
   }, [usernameLocked, username]);
@@ -53,7 +88,14 @@ function ServerConfig({
       }}
     >
       <h2 style={{ marginTop: 0 }}>User Configuration</h2>
-      <div style={{ marginBottom: "20px" }}>
+      <div
+        style={{
+          marginBottom: "20px",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "flex-start",
+        }}
+      >
         <input
           type="text"
           value={username}
@@ -64,6 +106,7 @@ function ServerConfig({
             padding: "10px",
             width: "250px",
             marginRight: "10px",
+            marginBottom: "10px",
             borderRadius: "5px",
             border: "1px solid #555",
             backgroundColor: usernameLocked ? "#3a3b42" : "#202124",
@@ -76,14 +119,16 @@ function ServerConfig({
           style={{
             backgroundColor: usernameLocked ? "#888" : "#5865F2",
             color: "white",
-            padding: "10px 20px",
+            padding: "8px 16px",
             border: "none",
             borderRadius: "5px",
             cursor: usernameLocked ? "not-allowed" : "pointer",
             opacity: usernameLocked ? 0.5 : 1,
+            marginBottom: "10px",
+            alignSelf: "flex-start",
           }}
         >
-          {usernameLocked ? "Username Set" : "Set Username"}
+          {usernameLocked ? "Username Set!" : "Set Username"}
         </button>
       </div>
       {statusMessage && <p>{statusMessage}</p>}
@@ -94,7 +139,7 @@ function ServerConfig({
         <input
           type="checkbox"
           checked={useCustomRelay}
-          onChange={() => setUseCustomRelay(!useCustomRelay)}
+          onChange={handleRelayCheckbox}
           style={{ marginRight: "10px" }}
         />
         I want to use my own relay server
@@ -140,7 +185,7 @@ function ServerConfig({
         <input
           type="checkbox"
           checked={useCustomStunTurn}
-          onChange={() => setUseCustomStunTurn(!useCustomStunTurn)}
+          onChange={handleStunTurnCheckbox}
           style={{ marginRight: "10px" }}
         />
         I want to use my own STUN/TURN servers
@@ -212,6 +257,24 @@ function ServerConfig({
           color: "white",
         }}
       />
+
+      <div style={{ marginTop: "10px", display: "flex", gap: "10px" }}>
+        <button
+          onClick={handleSendConfigurations}
+          disabled={configurationsSent}
+          style={{
+            backgroundColor: configurationsSent ? "#888" : "#5865F2",
+            color: "white",
+            padding: "8px 16px",
+            border: "none",
+            borderRadius: "5px",
+            cursor: configurationsSent ? "not-allowed" : "pointer",
+            opacity: configurationsSent ? 0.5 : 1,
+          }}
+        >
+          {configurationsSent ? "Configurations Sent" : "Send Configurations"}
+        </button>
+      </div>
     </div>
   );
 }

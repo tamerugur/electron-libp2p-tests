@@ -7,10 +7,20 @@ import VoiceChat from "./VoiceChat";
 function Main(props) {
   const [currentPeerAddr, setCurrentPeerAddr] = useState(null);
   const [usernameLocked, setUsernameLocked] = useState(false);
+  const [configState, setConfigState] = useState({
+    configurationsSent: false,
+    useCustomRelay: false,
+    useCustomStunTurn: false,
+  });
 
   // Handler to receive username lock state from VoiceChat
   const handleUsernameStateChange = (uname, locked) => {
     setUsernameLocked(locked);
+  };
+
+  // Handler to receive config state from VoiceChat
+  const handleConfigStateChange = (state) => {
+    setConfigState((prev) => ({ ...prev, ...state }));
   };
 
   // Define fixed heights and proportional widths for the layout
@@ -35,6 +45,9 @@ function Main(props) {
         chatHeight={componentHeight}
         chatWidth={serverWidth}
         usernameLocked={usernameLocked}
+        configurationsSent={configState.configurationsSent}
+        useCustomRelay={configState.useCustomRelay}
+        useCustomStunTurn={configState.useCustomStunTurn}
       />
       <Chat
         chatHeight={componentHeight}
@@ -46,6 +59,7 @@ function Main(props) {
         chatWidth={voiceChatWidth}
         currentPeerAddr={currentPeerAddr}
         onUsernameStateChange={handleUsernameStateChange}
+        onConfigStateChange={handleConfigStateChange}
       />
     </div>
   );
